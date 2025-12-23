@@ -1,1 +1,29 @@
-/target
+# Build artifacts
+/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Benchmark output files
+*.dat
+results/
+*.results.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Grafana/Prometheus data
+grafana/data/
+prometheus/data/
+
+# Environment files
+.env
+.env.local
+
+# Test files
+nfsb_*
