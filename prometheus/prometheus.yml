@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'nfsb'
+    static_configs:
+      - targets: ['host.docker.internal:9090']
+    scrape_interval: 1s
+    metrics_path: /metrics
