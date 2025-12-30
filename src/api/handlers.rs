@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::{benchmarks, metrics, report, storage, BenchmarkType, FileSize, OutputFormat};
 
-use super::models::{
+use super::types::{
     ErrorResponse, HealthResponse, InfoRequest, InfoResponse, JobResultsResponse,
     JobStatus, JobStatusResponse, ListJobsResponse, ListMountsResponse, MountInfo,
     MountRequest, MountResponse, RunBenchmarkRequest, RunBenchmarkResponse,

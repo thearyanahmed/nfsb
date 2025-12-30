@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::report::BenchmarkReport;
 
-use super::models::JobStatus;
+use super::types::JobStatus;
 
 /// represents a benchmark job
 #[derive(Debug, Clone)]
