@@ -1,6 +1,6 @@
 [package]
 name = "nfsb"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "NFS benchmark tool for DigitalOcean App Platform"
 authors = ["DigitalOcean App Platform Team"]
