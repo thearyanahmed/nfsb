@@ -13,9 +13,10 @@ use crate::config::Config;
 use crate::{benchmarks, metrics, report, storage, BenchmarkType, FileSize, OutputFormat};
 
 use super::types::{
-    ErrorResponse, HealthResponse, InfoRequest, InfoResponse, JobResultsResponse,
-    JobStatus, JobStatusResponse, ListJobsResponse, ListMountsResponse, MountInfo,
-    MountRequest, MountResponse, RunBenchmarkRequest, RunBenchmarkResponse,
+    EndpointDoc, ErrorResponse, HealthResponse, InfoRequest, InfoResponse,
+    JobResultsResponse, JobStatus, JobStatusResponse, JobsSummary, ListJobsResponse,
+    ListMountsResponse, MountInfo, MountRequest, MountResponse, RunBenchmarkRequest,
+    RunBenchmarkResponse, StatusResponse,
 };
 use super::state::AppState;
 
@@ -312,6 +313,156 @@ pub async fn health() -> impl IntoResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     })
+}
+
+/// GET /
+/// root status endpoint with overview of the system
+pub async fn root_status(State(state): State<AppState>) -> impl IntoResponse {
+    // get jobs summary
+    let jobs = state.list_jobs().await;
+    let jobs_summary = JobsSummary {
+        total: jobs.len(),
+        pending: jobs.iter().filter(|j| j.status == JobStatus::Pending).count(),
+        running: jobs.iter().filter(|j| j.status == JobStatus::Running).count(),
+        completed: jobs.iter().filter(|j| j.status == JobStatus::Completed).count(),
+        failed: jobs.iter().filter(|j| j.status == JobStatus::Failed).count(),
+        jobs: jobs
+            .into_iter()
+            .map(|job| JobStatusResponse {
+                job_id: job.id,
+                status: job.status,
+                message: job.message,
+                progress: job.progress,
+                started_at: job.started_at.map(|t| t.to_rfc3339()),
+                completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+            })
+            .collect(),
+    };
+
+    // get mounts (filter to show only relevant ones)
+    let mounts = get_relevant_mounts().await;
+
+    // endpoint documentation
+    let endpoints = get_endpoint_docs();
+
+    let status = if jobs_summary.running > 0 {
+        "running benchmarks"
+    } else {
+        "idle"
+    };
+
+    Json(StatusResponse {
+        name: "nfsb".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        status: status.to_string(),
+        jobs: jobs_summary,
+        mounts,
+        endpoints,
+    })
+}
+
+/// get mounts, filtering to relevant ones (nfs, user mounts)
+async fn get_relevant_mounts() -> Vec<MountInfo> {
+    match tokio::fs::read_to_string("/proc/mounts").await {
+        Ok(contents) => {
+            contents
+                .lines()
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        let fstype = parts[2];
+                        let target = parts[1];
+                        // filter: nfs mounts, /mnt/*, /data/*
+                        if fstype.starts_with("nfs")
+                            || target.starts_with("/mnt")
+                            || target.starts_with("/data")
+                        {
+                            return Some(MountInfo {
+                                source: parts[0].to_string(),
+                                target: target.to_string(),
+                                fstype: fstype.to_string(),
+                                options: parts[3].to_string(),
+                            });
+                        }
+                    }
+                    None
+                })
+                .collect()
+        }
+        Err(_) => vec![],
+    }
+}
+
+/// generate endpoint documentation with curl examples
+fn get_endpoint_docs() -> Vec<EndpointDoc> {
+    vec![
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/".to_string(),
+            description: "Get system status, jobs, mounts, and API docs".to_string(),
+            curl_example: "curl http://localhost:8080/".to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/health".to_string(),
+            description: "Health check".to_string(),
+            curl_example: "curl http://localhost:8080/health".to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/mounts".to_string(),
+            description: "Mount a filesystem (NFS, etc)".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/mounts -H "Content-Type: application/json" -d '{"source": "10.0.0.1:/export", "target": "/mnt/nfs"}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/mounts".to_string(),
+            description: "List all mounts".to_string(),
+            curl_example: "curl http://localhost:8080/api/v1/mounts".to_string(),
+        },
+        EndpointDoc {
+            method: "DELETE".to_string(),
+            path: "/api/v1/mounts?target=<path>".to_string(),
+            description: "Unmount a filesystem".to_string(),
+            curl_example: r#"curl -X DELETE "http://localhost:8080/api/v1/mounts?target=/mnt/nfs""#.to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/benchmarks/run".to_string(),
+            description: "Start a benchmark job".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/benchmarks/run -H "Content-Type: application/json" -d '{"path": "/mnt/nfs", "benchmark": "sequential", "sizes": ["small", "medium"], "iterations": 50}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/benchmarks/:id/status".to_string(),
+            description: "Get job status".to_string(),
+            curl_example: "curl http://localhost:8080/api/v1/benchmarks/<job_id>/status".to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/benchmarks/:id/results".to_string(),
+            description: "Get job results".to_string(),
+            curl_example: "curl http://localhost:8080/api/v1/benchmarks/<job_id>/results".to_string(),
+        },
+        EndpointDoc {
+            method: "DELETE".to_string(),
+            path: "/api/v1/benchmarks/:id".to_string(),
+            description: "Delete a job".to_string(),
+            curl_example: "curl -X DELETE http://localhost:8080/api/v1/benchmarks/<job_id>".to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/jobs".to_string(),
+            description: "List all jobs".to_string(),
+            curl_example: "curl http://localhost:8080/api/v1/jobs".to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/info?path=<path>".to_string(),
+            description: "Get environment info for a path".to_string(),
+            curl_example: r#"curl "http://localhost:8080/api/v1/info?path=/mnt/nfs""#.to_string(),
+        },
+    ]
 }
 
 /// DELETE /api/v1/benchmarks/{job_id}
