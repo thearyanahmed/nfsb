@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tracing::{info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
+mod api;
 mod benchmarks;
 mod config;
 mod metrics;
@@ -102,6 +103,12 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         path: PathBuf,
     },
+    /// Start REST API server
+    Serve {
+        /// Port to listen on
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum, Debug, PartialEq, Eq)]
@@ -192,6 +199,9 @@ async fn main() -> Result<()> {
         }
         Commands::Info { path } => {
             show_info(&path, cli.format).await?;
+        }
+        Commands::Serve { port } => {
+            api::serve(port).await?;
         }
     }
 
