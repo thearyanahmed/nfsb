@@ -23,40 +23,35 @@ impl Collector {
 
         // Bytes written counter
         let bytes_written = CounterVec::new(
-            Opts::new("nfsb_bytes_written_total", "Total bytes written")
-                .namespace("nfsb"),
+            Opts::new("nfsb_bytes_written_total", "Total bytes written"),
             &["size", "benchmark"],
         )
         .expect("Failed to create bytes_written counter");
 
         // Bytes read counter
         let bytes_read = CounterVec::new(
-            Opts::new("nfsb_bytes_read_total", "Total bytes read")
-                .namespace("nfsb"),
+            Opts::new("nfsb_bytes_read_total", "Total bytes read"),
             &["size", "benchmark"],
         )
         .expect("Failed to create bytes_read counter");
 
         // Operations counter
         let operations_total = CounterVec::new(
-            Opts::new("nfsb_operations_total", "Total operations performed")
-                .namespace("nfsb"),
+            Opts::new("nfsb_operations_total", "Total operations performed"),
             &["operation", "size", "benchmark"],
         )
         .expect("Failed to create operations_total counter");
 
         // Throughput gauge
         let throughput_mbps = GaugeVec::new(
-            Opts::new("nfsb_throughput_mbps", "Current throughput in MB/s")
-                .namespace("nfsb"),
+            Opts::new("nfsb_throughput_mbps", "Current throughput in MB/s"),
             &["operation", "size", "benchmark"],
         )
         .expect("Failed to create throughput_mbps gauge");
 
         // IOPS gauge
         let iops = GaugeVec::new(
-            Opts::new("nfsb_iops", "Current IOPS")
-                .namespace("nfsb"),
+            Opts::new("nfsb_iops", "Current IOPS"),
             &["operation", "size", "benchmark"],
         )
         .expect("Failed to create iops gauge");
@@ -67,7 +62,6 @@ impl Collector {
                 "nfsb_operation_duration_seconds",
                 "Duration of benchmark operations",
             )
-            .namespace("nfsb")
             .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]),
             &["benchmark"],
         )
@@ -76,7 +70,6 @@ impl Collector {
         // Latency histogram
         let latency = HistogramVec::new(
             HistogramOpts::new("nfsb_latency_seconds", "I/O operation latency")
-                .namespace("nfsb")
                 .buckets(vec![
                     0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0,
                 ]),
