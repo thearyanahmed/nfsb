@@ -348,7 +348,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "nfsb_iops",
+          "expr": "rate(nfsb_operations_total[1m])",
           "legendFormat": "{{operation}} - {{size}}",
           "range": true,
           "refId": "A"
@@ -412,7 +412,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "nfsb_operation_duration_seconds",
+          "expr": "nfsb_operation_duration_seconds_sum",
           "legendFormat": "{{benchmark}}",
           "range": true,
           "refId": "A"

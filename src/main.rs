@@ -121,6 +121,10 @@ pub enum BenchmarkType {
     Concurrent,
     /// File metadata operations (create/delete)
     Metadata,
+    /// Mixed read/write operations (configurable ratio)
+    Mixed,
+    /// Append operations (continuously append to files)
+    Append,
     /// All benchmarks
     All,
 }

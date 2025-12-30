@@ -1,5 +1,7 @@
+mod append;
 mod concurrent;
 mod metadata;
+mod mixed;
 mod random;
 mod sequential;
 
@@ -13,8 +15,10 @@ use crate::report::BenchmarkResult;
 use crate::storage::EnvironmentInfo;
 use crate::BenchmarkType;
 
+pub use append::run_append;
 pub use concurrent::run_concurrent;
 pub use metadata::run_metadata;
+pub use mixed::run_mixed;
 pub use random::run_random;
 pub use sequential::run_sequential;
 
@@ -53,6 +57,16 @@ pub async fn run_all(
             let meta_results = run_metadata(config, collector).await?;
             results.insert("metadata".to_string(), meta_results);
         }
+        BenchmarkType::Mixed => {
+            info!("Running mixed read/write benchmarks");
+            let mixed_results = run_mixed(config, collector).await?;
+            results.insert("mixed".to_string(), mixed_results);
+        }
+        BenchmarkType::Append => {
+            info!("Running append benchmarks");
+            let append_results = run_append(config, collector).await?;
+            results.insert("append".to_string(), append_results);
+        }
         BenchmarkType::All => {
             info!("Running all benchmarks");
 
@@ -71,6 +85,14 @@ pub async fn run_all(
             info!("Running metadata benchmarks");
             let meta_results = run_metadata(config, collector).await?;
             results.insert("metadata".to_string(), meta_results);
+
+            info!("Running mixed read/write benchmarks");
+            let mixed_results = run_mixed(config, collector).await?;
+            results.insert("mixed".to_string(), mixed_results);
+
+            info!("Running append benchmarks");
+            let append_results = run_append(config, collector).await?;
+            results.insert("append".to_string(), append_results);
         }
     }
 

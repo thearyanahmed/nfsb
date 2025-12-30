@@ -11,7 +11,7 @@ pub struct RunBenchmarkRequest {
     pub path: String,
 
     /// specific benchmark to run (default: all)
-    /// options: sequential, random, concurrent, metadata, all
+    /// options: sequential, random, concurrent, metadata, mixed, append, all
     #[serde(default)]
     pub benchmark: Option<String>,
 
