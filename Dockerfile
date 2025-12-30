@@ -28,17 +28,24 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
     nfs-common \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# Create directory for benchmark data
+# create directory for benchmark data
 RUN mkdir -p /data
 
 WORKDIR /data
 
+# prometheus metrics port
 EXPOSE 9090
+# REST API port
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["nfsb"]
-CMD ["--help"]
+CMD ["serve", "--port", "8080"]
