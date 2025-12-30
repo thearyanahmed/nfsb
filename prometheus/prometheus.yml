@@ -7,10 +7,11 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # scrape nfsb via App Platform internal networking
-  # services can communicate using service name as hostname
+  # scrape nfsb on App Platform
+  # REPLACE with your app's URL (e.g., nfsb-xxxxx.ondigitalocean.app)
   - job_name: 'nfsb'
     static_configs:
-      - targets: ['nfsb:8080']
+      - targets: ['nfsb-xxxxx.ondigitalocean.app']
+    scheme: https
     scrape_interval: 5s
     metrics_path: /metrics

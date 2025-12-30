@@ -1,41 +1,12 @@
 name: nfsb
-
 services:
-  # main benchmark service
-  - name: nfsb
-    github:
-      repo: thearyanahmed/nfsb
-      branch: master
-    dockerfile_path: Dockerfile
-    http_port: 8080
-    instance_size_slug: apps-s-1vcpu-2gb
-    instance_count: 1
-    health_check:
-      http_path: /health
-    # expose internal port for prometheus to scrape
-    internal_ports:
-      - 8080
-
-  # prometheus for metrics collection
-  - name: prometheus
-    github:
-      repo: thearyanahmed/nfsb
-      branch: master
-    dockerfile_path: prometheus/Dockerfile
-    http_port: 9090
-    instance_size_slug: apps-s-1vcpu-1gb
-    instance_count: 1
-    health_check:
-      http_path: /-/healthy
-
-  # grafana for visualization
-  - name: grafana
-    github:
-      repo: thearyanahmed/nfsb
-      branch: master
-    dockerfile_path: grafana/Dockerfile
-    http_port: 3000
-    instance_size_slug: apps-s-1vcpu-1gb
-    instance_count: 1
-    health_check:
-      http_path: /api/health
+- name: nfsb
+  github:
+    repo: thearyanahmed/nfsb
+    branch: master
+  dockerfile_path: Dockerfile
+  http_port: 8080
+  instance_size_slug: apps-s-1vcpu-2gb
+  instance_count: 1
+  health_check:
+    http_path: /health
