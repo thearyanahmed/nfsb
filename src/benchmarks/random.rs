@@ -72,12 +72,18 @@ async fn run_random_write(
         .await?;
 
     let max_offset = file_size - BLOCK_SIZE;
-    let mut rng = rand::thread_rng();
+
+    // pre-generate all random offsets to avoid holding RNG across await points
+    let offsets: Vec<u64> = {
+        let mut rng = rand::thread_rng();
+        (0..iterations)
+            .map(|_| rng.gen_range(0..=max_offset) as u64)
+            .collect()
+    };
 
     let total_start = Instant::now();
 
-    for i in 0..iterations {
-        let offset = rng.gen_range(0..=max_offset) as u64;
+    for (i, &offset) in offsets.iter().enumerate() {
 
         let iter_start = Instant::now();
         file.seek(SeekFrom::Start(offset)).await?;
@@ -168,12 +174,18 @@ async fn run_random_read(
     let mut file = File::open(&file_path).await?;
     let mut buffer = vec![0u8; BLOCK_SIZE];
     let max_offset = file_size - BLOCK_SIZE;
-    let mut rng = rand::thread_rng();
+
+    // pre-generate all random offsets to avoid holding RNG across await points
+    let offsets: Vec<u64> = {
+        let mut rng = rand::thread_rng();
+        (0..iterations)
+            .map(|_| rng.gen_range(0..=max_offset) as u64)
+            .collect()
+    };
 
     let total_start = Instant::now();
 
-    for i in 0..iterations {
-        let offset = rng.gen_range(0..=max_offset) as u64;
+    for (i, &offset) in offsets.iter().enumerate() {
 
         let iter_start = Instant::now();
         file.seek(SeekFrom::Start(offset)).await?;
