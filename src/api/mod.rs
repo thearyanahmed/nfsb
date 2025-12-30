@@ -22,6 +22,8 @@ pub fn create_router(state: AppState) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        // root status
+        .route("/", get(handlers::root_status))
         // health check
         .route("/health", get(handlers::health))
         // benchmark operations
@@ -61,16 +63,17 @@ pub async fn serve(port: u16) -> anyhow::Result<()> {
 
     info!(port = port, "Starting REST API server");
     info!("API endpoints:");
+    info!("  GET    /                               - System status & API docs");
+    info!("  GET    /health                         - Health check");
+    info!("  POST   /api/v1/mounts                  - Mount filesystem");
+    info!("  GET    /api/v1/mounts                  - List mounts");
+    info!("  DELETE /api/v1/mounts?target=<path>    - Unmount filesystem");
     info!("  POST   /api/v1/benchmarks/run          - Start a benchmark");
     info!("  GET    /api/v1/benchmarks/:id/status   - Get job status");
     info!("  GET    /api/v1/benchmarks/:id/results  - Get job results");
     info!("  DELETE /api/v1/benchmarks/:id          - Delete a job");
     info!("  GET    /api/v1/jobs                    - List all jobs");
     info!("  GET    /api/v1/info?path=<path>        - Get environment info");
-    info!("  GET    /api/v1/mounts                  - List mounts");
-    info!("  POST   /api/v1/mounts                  - Mount filesystem");
-    info!("  DELETE /api/v1/mounts?target=<path>    - Unmount filesystem");
-    info!("  GET    /health                         - Health check");
 
     axum::serve(listener, app).await?;
 
