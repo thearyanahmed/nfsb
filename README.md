@@ -166,6 +166,27 @@ nfsb run --path /mnt/nfs --sizes small,medium
 #   large:  100MB
 ```
 
+#### How test files work
+
+Test files are **generated dynamically at runtime** and **cleaned up after each benchmark**. No test files are stored in the repository.
+
+| Size | Bytes | Example Filename |
+|------|-------|------------------|
+| small | 4 KB | `nfsb_seq_write_small.dat` |
+| medium | 1 MB | `nfsb_seq_write_medium.dat` |
+| large | 100 MB | `nfsb_seq_write_large.dat` |
+
+The benchmark flow:
+1. Random data is generated in memory
+2. Data is written to the target path (e.g., `/mnt/nfs/nfsb_seq_write_small.dat`)
+3. Benchmark operations run (read/write iterations)
+4. Test file is deleted
+
+This ensures:
+- Fresh random data for each test (prevents filesystem caching tricks)
+- Tests run on the actual target filesystem (NFS or ephemeral)
+- No leftover files after benchmarks complete
+
 ### Configure iterations
 
 ```bash
