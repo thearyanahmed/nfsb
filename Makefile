@@ -1,4 +1,4 @@
-.PHONY: build build-release run serve info test clean fmt lint help
+.PHONY: build build-release run serve info test clean fmt lint help docker-build docker-run
 
 # default target
 all: build
@@ -58,6 +58,19 @@ check:
 # build and run server in one command
 dev: build-release serve
 
+# build docker image
+docker-build:
+	docker build -t nfsb:latest .
+
+# run docker container
+docker-run:
+	docker run -p 8080:8080 -p 9090:9090 nfsb:latest
+
+# run docker container with volume mount
+# usage: make docker-run-mount VOLUME=/path/to/nfs
+docker-run-mount:
+	docker run -p 8080:8080 -p 9090:9090 -v $(VOLUME):/data nfsb:latest
+
 # show help
 help:
 	@echo "nfsb - NFS Benchmark Tool"
@@ -83,6 +96,11 @@ help:
 	@echo "  make fmt            - Format code"
 	@echo "  make lint           - Lint code"
 	@echo "  make check          - Check code without building"
+	@echo ""
+	@echo "Docker commands:"
+	@echo "  make docker-build                   - Build docker image"
+	@echo "  make docker-run                     - Run container"
+	@echo "  make docker-run-mount VOLUME=/mnt   - Run with volume mount"
 	@echo ""
 	@echo "REST API endpoints (when server is running):"
 	@echo "  POST   /api/v1/benchmarks/run       - Start a benchmark"
