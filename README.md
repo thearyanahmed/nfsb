@@ -1,6 +1,35 @@
 # nfsb - NFS Benchmark Tool
 
-A Rust CLI tool for benchmarking NFS performance on DigitalOcean App Platform, specifically measuring the impact of gVisor on file I/O operations.
+A Rust CLI and REST API tool for benchmarking NFS performance on DigitalOcean App Platform, specifically measuring the impact of gVisor on file I/O operations.
+
+## Purpose
+
+Before building NFS support for App Platform, we need to benchmark how gVisor impacts NFS performance. This tool helps determine if NFS + gVisor is viable or if performance bottlenecks make it unusable.
+
+## Test Environments
+
+| Environment | Runtime | Storage | Purpose |
+|-------------|---------|---------|---------|
+| **Env 1** | gVisor | NFS | Default App Platform with NFS mounted |
+| **Env 2** | gVisor | Ephemeral | Default App Platform baseline |
+| **Env 3** | runc | NFS | Container without gVisor sandbox |
+| **Env 4** | runc | Ephemeral | Container baseline without gVisor |
+
+## Quick Start
+
+```bash
+# build
+make build-release
+
+# run REST API server
+make serve
+
+# or with docker
+make docker-build
+make docker-run
+```
+
+Then open http://localhost:8080/ to see system status and API documentation.
 
 ## Features
 
@@ -14,19 +43,101 @@ A Rust CLI tool for benchmarking NFS performance on DigitalOcean App Platform, s
 
 ## Installation
 
-### Build from source
-
 ```bash
-cargo build --release
+# build from source
+make build-release
+
+# or with docker
+make docker-build
 ```
 
-### Docker
+## REST API
+
+Start the server:
 
 ```bash
-docker build -t nfsb .
+nfsb serve --port 8080
 ```
 
-## Usage
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | System status, jobs, mounts, and API docs |
+| GET | `/health` | Health check |
+| POST | `/api/v1/mounts` | Mount a filesystem |
+| GET | `/api/v1/mounts` | List all mounts |
+| DELETE | `/api/v1/mounts?target=<path>` | Unmount a filesystem |
+| POST | `/api/v1/benchmarks/run` | Start a benchmark job |
+| GET | `/api/v1/benchmarks/:id/status` | Get job status |
+| GET | `/api/v1/benchmarks/:id/results` | Get job results |
+| DELETE | `/api/v1/benchmarks/:id` | Delete a job |
+| GET | `/api/v1/jobs` | List all jobs |
+| GET | `/api/v1/info?path=<path>` | Get environment info |
+
+### Example: Mount NFS and Run Benchmark
+
+```bash
+# 1. mount nfs share
+curl -X POST http://localhost:8080/api/v1/mounts \
+  -H "Content-Type: application/json" \
+  -d '{"source": "10.0.0.1:/export", "target": "/mnt/nfs"}'
+
+# 2. start benchmark on nfs
+curl -X POST http://localhost:8080/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/mnt/nfs", "benchmark": "all", "iterations": 50}'
+
+# response: {"job_id": "uuid-here", "status": "pending", ...}
+
+# 3. check status
+curl http://localhost:8080/api/v1/benchmarks/<job_id>/status
+
+# 4. get results when completed
+curl http://localhost:8080/api/v1/benchmarks/<job_id>/results
+```
+
+### Example: Compare NFS vs Ephemeral Storage
+
+```bash
+# run on nfs
+curl -X POST http://localhost:8080/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/mnt/nfs", "benchmark": "sequential"}'
+
+# run on ephemeral (local) storage
+curl -X POST http://localhost:8080/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/data", "benchmark": "sequential"}'
+
+# compare results from both job IDs
+```
+
+### Benchmark Request Options
+
+```json
+{
+  "path": "/mnt/nfs",
+  "benchmark": "all",
+  "sizes": ["small", "medium", "large"],
+  "iterations": 100,
+  "concurrency": [1, 4, 8, 16],
+  "prometheus_port": 9090,
+  "no_warmup": false
+}
+```
+
+| Field | Default | Options |
+|-------|---------|---------|
+| `path` | required | Path to benchmark directory |
+| `benchmark` | `all` | `sequential`, `random`, `concurrent`, `metadata`, `all` |
+| `sizes` | `["small","medium","large"]` | `small` (4KB), `medium` (1MB), `large` (100MB) |
+| `iterations` | `100` | Number of iterations per test |
+| `concurrency` | `[1,4,8,16]` | Concurrency levels for concurrent tests |
+| `prometheus_port` | `9090` | Port for metrics (0 to disable) |
+| `no_warmup` | `false` | Skip warmup phase |
+
+## CLI Usage
 
 ### Run all benchmarks
 
@@ -211,4 +322,177 @@ cargo clippy
 
 ```bash
 cargo fmt
+```
+
+## Testing Strategy
+
+### Overview
+
+We're testing NFS performance across different runtime environments to determine if gVisor's overhead makes NFS unusable on App Platform.
+
+### Test Matrix
+
+| Test | gVisor + NFS | gVisor + Ephemeral | runc + NFS | runc + Ephemeral |
+|------|--------------|-------------------|------------|------------------|
+| Sequential Read | ✓ | ✓ | ✓ | ✓ |
+| Sequential Write | ✓ | ✓ | ✓ | ✓ |
+| Random Read | ✓ | ✓ | ✓ | ✓ |
+| Random Write | ✓ | ✓ | ✓ | ✓ |
+| Concurrent I/O | ✓ | ✓ | ✓ | ✓ |
+| Metadata Ops | ✓ | ✓ | ✓ | ✓ |
+
+### Step-by-Step Testing Guide
+
+#### 1. Deploy to App Platform
+
+```bash
+# deploy using the app spec
+doctl apps create --spec app.yaml
+```
+
+#### 2. Get the App URL
+
+```bash
+doctl apps list
+# note the live URL
+```
+
+#### 3. Check System Status
+
+```bash
+curl https://<app-url>/
+```
+
+This returns current jobs, mounts, and API documentation.
+
+#### 4. Mount NFS Share
+
+```bash
+curl -X POST https://<app-url>/api/v1/mounts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "<nfs-server>:/export",
+    "target": "/mnt/nfs",
+    "fstype": "nfs",
+    "options": "rw,hard,intr"
+  }'
+```
+
+#### 5. Run Benchmarks
+
+```bash
+# test NFS performance
+curl -X POST https://<app-url>/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/mnt/nfs",
+    "benchmark": "all",
+    "sizes": ["small", "medium", "large"],
+    "iterations": 100
+  }'
+
+# save the job_id from response
+JOB_ID="<job-id-from-response>"
+
+# test ephemeral storage for comparison
+curl -X POST https://<app-url>/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/data",
+    "benchmark": "all",
+    "sizes": ["small", "medium", "large"],
+    "iterations": 100
+  }'
+```
+
+#### 6. Monitor Progress
+
+```bash
+curl https://<app-url>/api/v1/benchmarks/$JOB_ID/status
+```
+
+#### 7. Get Results
+
+```bash
+curl https://<app-url>/api/v1/benchmarks/$JOB_ID/results | jq .
+```
+
+#### 8. Compare Results
+
+Key metrics to compare:
+- **Throughput (MB/s)**: Higher is better
+- **IOPS**: Higher is better for random I/O
+- **Latency p50/p95/p99**: Lower is better
+
+### Expected Outcomes
+
+| Scenario | Expected Impact |
+|----------|----------------|
+| gVisor overhead | 10-50% slower than runc for file I/O |
+| NFS vs Ephemeral | NFS typically 2-10x slower due to network |
+| gVisor + NFS | Combined overhead - key metric for go/no-go |
+
+### Success Criteria
+
+- NFS read/write throughput > 50 MB/s
+- Random IOPS > 1000
+- p99 latency < 100ms
+- No significant degradation under concurrent load
+
+### Troubleshooting
+
+#### Mount fails
+
+```bash
+# check if nfs-common is installed (should be in Docker image)
+# check NFS server connectivity
+# verify NFS export permissions
+```
+
+#### Benchmark hangs
+
+```bash
+# check job status
+curl https://<app-url>/api/v1/benchmarks/$JOB_ID/status
+
+# check app logs
+doctl apps logs <app-id>
+```
+
+#### Permission denied
+
+```bash
+# NFS export may need to allow the container's UID
+# Check NFS server exports: /etc/exports
+```
+
+## App Platform Deployment
+
+### Using app.yaml
+
+```yaml
+name: nfsb
+services:
+- name: nfsb
+  github:
+    repo: thearyanahmed/nfsb
+    branch: master
+  dockerfile_path: Dockerfile
+  http_port: 8080
+  instance_size_slug: apps-s-1vcpu-2gb
+  instance_count: 1
+  health_check:
+    http_path: /health
+```
+
+### Deploy
+
+```bash
+doctl apps create --spec app.yaml
+```
+
+### Update
+
+```bash
+doctl apps update <app-id> --spec app.yaml
 ```
