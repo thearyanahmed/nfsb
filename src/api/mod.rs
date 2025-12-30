@@ -13,6 +13,8 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 
 use state::AppState;
+use crate::metrics::SystemMetrics;
+use std::sync::Arc;
 
 /// create the API router with all endpoints
 pub fn create_router(state: AppState) -> Router {
@@ -59,6 +61,10 @@ pub fn create_router(state: AppState) -> Router {
 pub async fn serve(port: u16) -> anyhow::Result<()> {
     let state = AppState::new();
     let app = create_router(state);
+
+    // start system metrics collection (refresh every 5 seconds)
+    let system_metrics = Arc::new(SystemMetrics::new());
+    system_metrics.clone().start_background_refresh(5);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(addr).await?;

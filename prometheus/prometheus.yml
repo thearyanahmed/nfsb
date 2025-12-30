@@ -11,7 +11,7 @@ scrape_configs:
   # REPLACE with your app's URL (e.g., nfsb-xxxxx.ondigitalocean.app)
   - job_name: 'nfsb'
     static_configs:
-      - targets: ['nfsb-xxxxx.ondigitalocean.app']
+      - targets: ['nfsb-76rng.onstagingocean.app']
     scheme: https
     scrape_interval: 5s
     metrics_path: /metrics
