@@ -189,3 +189,34 @@ pub struct MountInfo {
     pub fstype: String,
     pub options: String,
 }
+
+/// root status response for GET /
+#[derive(Debug, Clone, Serialize)]
+pub struct StatusResponse {
+    pub name: String,
+    pub version: String,
+    pub status: String,
+    pub jobs: JobsSummary,
+    pub mounts: Vec<MountInfo>,
+    pub endpoints: Vec<EndpointDoc>,
+}
+
+/// summary of jobs
+#[derive(Debug, Clone, Serialize)]
+pub struct JobsSummary {
+    pub total: usize,
+    pub pending: usize,
+    pub running: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub jobs: Vec<JobStatusResponse>,
+}
+
+/// endpoint documentation
+#[derive(Debug, Clone, Serialize)]
+pub struct EndpointDoc {
+    pub method: String,
+    pub path: String,
+    pub description: String,
+    pub curl_example: String,
+}
