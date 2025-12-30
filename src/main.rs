@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -256,7 +256,7 @@ async fn run_benchmarks(config: Config) -> Result<()> {
     Ok(())
 }
 
-async fn show_info(path: &PathBuf, format: OutputFormat) -> Result<()> {
+async fn show_info(path: &Path, format: OutputFormat) -> Result<()> {
     let env_info = storage::detect_environment(path).await?;
 
     match format {
