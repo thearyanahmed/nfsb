@@ -142,3 +142,50 @@ pub struct HealthResponse {
     pub status: String,
     pub version: String,
 }
+
+/// request for POST /api/v1/mounts
+#[derive(Debug, Clone, Deserialize)]
+pub struct MountRequest {
+    /// nfs server and export path (e.g., "10.0.0.1:/export" or "nfs.example.com:/data")
+    pub source: String,
+
+    /// local mount point (e.g., "/mnt/nfs")
+    pub target: String,
+
+    /// filesystem type (default: nfs)
+    #[serde(default = "default_fstype")]
+    pub fstype: String,
+
+    /// mount options (e.g., "rw,hard,intr")
+    #[serde(default)]
+    pub options: Option<String>,
+}
+
+fn default_fstype() -> String {
+    "nfs".to_string()
+}
+
+/// response for mount operations
+#[derive(Debug, Clone, Serialize)]
+pub struct MountResponse {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub fstype: String,
+    pub status: String,
+}
+
+/// response for GET /api/v1/mounts
+#[derive(Debug, Clone, Serialize)]
+pub struct ListMountsResponse {
+    pub mounts: Vec<MountInfo>,
+}
+
+/// information about a mount
+#[derive(Debug, Clone, Serialize)]
+pub struct MountInfo {
+    pub source: String,
+    pub target: String,
+    pub fstype: String,
+    pub options: String,
+}
