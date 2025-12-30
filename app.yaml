@@ -1,0 +1,12 @@
+name: nfsb
+services:
+- name: nfsb
+  github:
+    repo: thearyanahmed/nfsb
+    branch: master
+  dockerfile_path: Dockerfile
+  http_port: 8080
+  instance_size_slug: apps-s-1vcpu-2gb
+  instance_count: 1
+  health_check:
+    http_path: /health
