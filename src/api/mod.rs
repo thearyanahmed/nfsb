@@ -26,6 +26,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/", get(handlers::root_status))
         // health check
         .route("/health", get(handlers::health))
+        // prometheus metrics
+        .route("/metrics", get(handlers::metrics))
         // benchmark operations
         .route("/api/v1/benchmarks/run", post(handlers::run_benchmark))
         .route(
@@ -65,6 +67,7 @@ pub async fn serve(port: u16) -> anyhow::Result<()> {
     info!("API endpoints:");
     info!("  GET    /                               - System status & API docs");
     info!("  GET    /health                         - Health check");
+    info!("  GET    /metrics                        - Prometheus metrics");
     info!("  POST   /api/v1/mounts                  - Mount filesystem");
     info!("  GET    /api/v1/mounts                  - List mounts");
     info!("  DELETE /api/v1/mounts?target=<path>    - Unmount filesystem");

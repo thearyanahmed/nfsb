@@ -7,8 +7,10 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  # scrape nfsb via App Platform internal networking
+  # services can communicate using service name as hostname
   - job_name: 'nfsb'
     static_configs:
-      - targets: ['host.docker.internal:9090']
-    scrape_interval: 1s
+      - targets: ['nfsb:8080']
+    scrape_interval: 5s
     metrics_path: /metrics

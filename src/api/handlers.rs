@@ -315,6 +315,33 @@ pub async fn health() -> impl IntoResponse {
     })
 }
 
+/// GET /metrics
+/// prometheus metrics endpoint
+pub async fn metrics() -> impl IntoResponse {
+    use prometheus::{Encoder, TextEncoder};
+
+    let encoder = TextEncoder::new();
+    let metric_families = prometheus::gather();
+    let mut buffer = Vec::new();
+
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(_) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, encoder.format_type())],
+            buffer,
+        )
+            .into_response(),
+        Err(e) => {
+            error!(error = %e, "Failed to encode metrics");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to encode metrics",
+            )
+                .into_response()
+        }
+    }
+}
+
 /// GET /
 /// root status endpoint with overview of the system
 pub async fn root_status(State(state): State<AppState>) -> impl IntoResponse {
@@ -407,6 +434,12 @@ fn get_endpoint_docs() -> Vec<EndpointDoc> {
             path: "/health".to_string(),
             description: "Health check".to_string(),
             curl_example: "curl http://localhost:8080/health".to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/metrics".to_string(),
+            description: "Prometheus metrics".to_string(),
+            curl_example: "curl http://localhost:8080/metrics".to_string(),
         },
         EndpointDoc {
             method: "POST".to_string(),
