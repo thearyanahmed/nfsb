@@ -1,0 +1,348 @@
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use std::path::PathBuf;
+use tracing::{error, info};
+use uuid::Uuid;
+
+use crate::config::Config;
+use crate::{benchmarks, metrics, report, storage, BenchmarkType, FileSize, OutputFormat};
+
+use super::models::{
+    ErrorResponse, HealthResponse, InfoRequest, InfoResponse, JobResultsResponse,
+    JobStatus, JobStatusResponse, ListJobsResponse, RunBenchmarkRequest, RunBenchmarkResponse,
+};
+use super::state::AppState;
+
+/// POST /api/v1/benchmarks/run
+/// starts a new benchmark job in the background
+pub async fn run_benchmark(
+    State(state): State<AppState>,
+    Json(req): Json<RunBenchmarkRequest>,
+) -> impl IntoResponse {
+    // validate path exists
+    let path = PathBuf::from(&req.path);
+    if !path.exists() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_path".to_string(),
+                message: format!("Path does not exist: {}", req.path),
+            }),
+        )
+            .into_response();
+    }
+
+    // parse benchmark type
+    let benchmark_type = match req.benchmark.as_deref() {
+        Some("sequential") => BenchmarkType::Sequential,
+        Some("random") => BenchmarkType::Random,
+        Some("concurrent") => BenchmarkType::Concurrent,
+        Some("metadata") => BenchmarkType::Metadata,
+        Some("all") | None => BenchmarkType::All,
+        Some(invalid) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_benchmark_type".to_string(),
+                    message: format!(
+                        "Invalid benchmark type: {}. Valid options: sequential, random, concurrent, metadata, all",
+                        invalid
+                    ),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // parse file sizes
+    let sizes: Result<Vec<FileSize>, String> = req
+        .sizes
+        .iter()
+        .map(|s| match s.as_str() {
+            "small" => Ok(FileSize::Small),
+            "medium" => Ok(FileSize::Medium),
+            "large" => Ok(FileSize::Large),
+            invalid => Err(format!("Invalid file size: {}", invalid)),
+        })
+        .collect();
+
+    let sizes = match sizes {
+        Ok(s) => s,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_file_size".to_string(),
+                    message: e,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // create the config
+    let config = Config {
+        path,
+        output: None,
+        benchmark: benchmark_type,
+        sizes,
+        iterations: req.iterations,
+        concurrency: req.concurrency,
+        prometheus_port: req.prometheus_port,
+        warmup: !req.no_warmup,
+        format: OutputFormat::Json,
+    };
+
+    // create a new job
+    let job_id = state.create_job().await;
+
+    // spawn background task to run the benchmark
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        run_benchmark_job(state_clone, job_id, config).await;
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(RunBenchmarkResponse {
+            job_id,
+            status: JobStatus::Pending,
+            message: "Benchmark job queued".to_string(),
+        }),
+    )
+        .into_response()
+}
+
+/// background task that runs the actual benchmark
+async fn run_benchmark_job(state: AppState, job_id: Uuid, config: Config) {
+    // mark job as running
+    state.update_job(job_id, |job| job.mark_running()).await;
+
+    info!(job_id = %job_id, path = %config.path.display(), "Starting benchmark job");
+
+    // detect environment
+    let env_info = match storage::detect_environment(&config.path).await {
+        Ok(info) => info,
+        Err(e) => {
+            error!(job_id = %job_id, error = %e, "Failed to detect environment");
+            state
+                .update_job(job_id, |job| {
+                    job.mark_failed(format!("Failed to detect environment: {}", e))
+                })
+                .await;
+            return;
+        }
+    };
+
+    state
+        .update_job(job_id, |job| {
+            job.update_progress(10, "Environment detected, starting benchmarks");
+        })
+        .await;
+
+    // start prometheus server if enabled
+    let _metrics_handle = if config.prometheus_port > 0 {
+        match metrics::start_server(config.prometheus_port).await {
+            Ok(handle) => Some(handle),
+            Err(e) => {
+                error!(job_id = %job_id, error = %e, "Failed to start metrics server");
+                // continue without metrics
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // initialize metrics collector
+    let collector = metrics::Collector::new();
+
+    state
+        .update_job(job_id, |job| {
+            job.update_progress(20, "Running benchmarks");
+        })
+        .await;
+
+    // run benchmarks
+    let results = match benchmarks::run_all(&config, &collector, &env_info).await {
+        Ok(r) => r,
+        Err(e) => {
+            error!(job_id = %job_id, error = %e, "Benchmark execution failed");
+            state
+                .update_job(job_id, |job| {
+                    job.mark_failed(format!("Benchmark execution failed: {}", e))
+                })
+                .await;
+            return;
+        }
+    };
+
+    state
+        .update_job(job_id, |job| {
+            job.update_progress(90, "Generating report");
+        })
+        .await;
+
+    // generate report
+    let benchmark_report = match report::generate(&results, &env_info, &config) {
+        Ok(r) => r,
+        Err(e) => {
+            error!(job_id = %job_id, error = %e, "Failed to generate report");
+            state
+                .update_job(job_id, |job| {
+                    job.mark_failed(format!("Failed to generate report: {}", e))
+                })
+                .await;
+            return;
+        }
+    };
+
+    // mark job as completed
+    state
+        .update_job(job_id, |job| job.mark_completed(benchmark_report))
+        .await;
+
+    info!(job_id = %job_id, "Benchmark job completed successfully");
+}
+
+/// GET /api/v1/benchmarks/{job_id}/status
+/// get the status of a benchmark job
+pub async fn get_job_status(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.get_job(job_id).await {
+        Some(job) => (
+            StatusCode::OK,
+            Json(JobStatusResponse {
+                job_id: job.id,
+                status: job.status,
+                message: job.message,
+                progress: job.progress,
+                started_at: job.started_at.map(|t| t.to_rfc3339()),
+                completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+            }),
+        )
+            .into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".to_string(),
+                message: format!("Job not found: {}", job_id),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/v1/benchmarks/{job_id}/results
+/// get the results of a completed benchmark job
+pub async fn get_job_results(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.get_job(job_id).await {
+        Some(job) => {
+            let response = JobResultsResponse {
+                job_id: job.id,
+                status: job.status,
+                report: job.report,
+                error: job.error,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".to_string(),
+                message: format!("Job not found: {}", job_id),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/v1/jobs
+/// list all benchmark jobs
+pub async fn list_jobs(State(state): State<AppState>) -> impl IntoResponse {
+    let jobs = state.list_jobs().await;
+    let job_responses: Vec<JobStatusResponse> = jobs
+        .into_iter()
+        .map(|job| JobStatusResponse {
+            job_id: job.id,
+            status: job.status,
+            message: job.message,
+            progress: job.progress,
+            started_at: job.started_at.map(|t| t.to_rfc3339()),
+            completed_at: job.completed_at.map(|t| t.to_rfc3339()),
+        })
+        .collect();
+
+    (StatusCode::OK, Json(ListJobsResponse { jobs: job_responses }))
+}
+
+/// GET /api/v1/info
+/// get environment information
+pub async fn get_info(Query(req): Query<InfoRequest>) -> impl IntoResponse {
+    let path = PathBuf::from(&req.path);
+
+    match storage::detect_environment(&path).await {
+        Ok(env_info) => (StatusCode::OK, Json(InfoResponse { environment: env_info })).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "detection_failed".to_string(),
+                message: format!("Failed to detect environment: {}", e),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /health
+/// health check endpoint
+pub async fn health() -> impl IntoResponse {
+    Json(HealthResponse {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}
+
+/// DELETE /api/v1/benchmarks/{job_id}
+/// cancel a running job or delete a completed job
+pub async fn delete_job(
+    State(state): State<AppState>,
+    Path(job_id): Path<Uuid>,
+) -> impl IntoResponse {
+    match state.get_job(job_id).await {
+        Some(job) => {
+            if matches!(job.status, JobStatus::Running) {
+                // TODO: implement job cancellation with tokio cancellation tokens
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "cannot_cancel".to_string(),
+                        message: "Cannot cancel a running job (not yet implemented)".to_string(),
+                    }),
+                )
+                    .into_response();
+            }
+
+            // for completed/failed jobs, we could remove them from state
+            // but for now just acknowledge
+            (StatusCode::NO_CONTENT, ()).into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".to_string(),
+                message: format!("Job not found: {}", job_id),
+            }),
+        )
+            .into_response(),
+    }
+}
