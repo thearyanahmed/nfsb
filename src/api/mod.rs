@@ -39,6 +39,13 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/jobs", get(handlers::list_jobs))
         // environment info
         .route("/api/v1/info", get(handlers::get_info))
+        // mount operations
+        .route(
+            "/api/v1/mounts",
+            get(handlers::list_mounts)
+                .post(handlers::create_mount)
+                .delete(handlers::delete_mount),
+        )
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -60,6 +67,9 @@ pub async fn serve(port: u16) -> anyhow::Result<()> {
     info!("  DELETE /api/v1/benchmarks/:id          - Delete a job");
     info!("  GET    /api/v1/jobs                    - List all jobs");
     info!("  GET    /api/v1/info?path=<path>        - Get environment info");
+    info!("  GET    /api/v1/mounts                  - List mounts");
+    info!("  POST   /api/v1/mounts                  - Mount filesystem");
+    info!("  DELETE /api/v1/mounts?target=<path>    - Unmount filesystem");
     info!("  GET    /health                         - Health check");
 
     axum::serve(listener, app).await?;
