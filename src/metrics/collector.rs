@@ -1,13 +1,11 @@
-use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, Opts, Registry,
-};
+use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
 use std::sync::Arc;
 use tracing::debug;
 
 /// Metrics collector for benchmark measurements
 #[derive(Clone)]
 pub struct Collector {
-    pub registry: Arc<Registry>,
+    _registry: Arc<Registry>,
 
     // Counters
     pub bytes_written: CounterVec,
@@ -102,7 +100,7 @@ impl Collector {
         debug!("Metrics collector initialized");
 
         Self {
-            registry: Arc::new(registry),
+            _registry: Arc::new(registry),
             bytes_written,
             bytes_read,
             operations_total,

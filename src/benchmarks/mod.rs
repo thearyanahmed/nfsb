@@ -22,7 +22,7 @@ pub use sequential::run_sequential;
 pub async fn run_all(
     config: &Config,
     collector: &Collector,
-    env_info: &EnvironmentInfo,
+    _env_info: &EnvironmentInfo,
 ) -> Result<HashMap<String, Vec<BenchmarkResult>>> {
     let mut results: HashMap<String, Vec<BenchmarkResult>> = HashMap::new();
 

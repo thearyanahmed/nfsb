@@ -485,8 +485,7 @@ pub async fn delete_job(
                     .into_response();
             }
 
-            // for completed/failed jobs, we could remove them from state
-            // but for now just acknowledge
+            state.delete_job(job_id).await;
             (StatusCode::NO_CONTENT, ()).into_response()
         }
         None => (

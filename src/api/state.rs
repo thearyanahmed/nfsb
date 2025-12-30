@@ -102,23 +102,9 @@ impl AppState {
         self.jobs.read().await.values().cloned().collect()
     }
 
-    /// remove old completed/failed jobs (keeps last N)
-    pub async fn cleanup_old_jobs(&self, keep_count: usize) {
-        let mut jobs = self.jobs.write().await;
-
-        // sort by completion time, keeping most recent
-        let mut completed: Vec<_> = jobs
-            .iter()
-            .filter(|(_, j)| matches!(j.status, JobStatus::Completed | JobStatus::Failed))
-            .map(|(id, j)| (*id, j.completed_at))
-            .collect();
-
-        completed.sort_by(|a, b| b.1.cmp(&a.1));
-
-        // remove jobs beyond keep_count
-        for (id, _) in completed.into_iter().skip(keep_count) {
-            jobs.remove(&id);
-        }
+    /// delete a job by id
+    pub async fn delete_job(&self, id: Uuid) -> bool {
+        self.jobs.write().await.remove(&id).is_some()
     }
 }
 

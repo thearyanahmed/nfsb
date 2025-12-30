@@ -8,20 +8,19 @@ use http_body_util::Full;
 use prometheus::{Encoder, TextEncoder};
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 
-use super::Collector;
-
 /// Handle for the running Prometheus server
+#[allow(dead_code)]
 pub struct ServerHandle {
     shutdown_tx: oneshot::Sender<()>,
     join_handle: JoinHandle<()>,
 }
 
+#[allow(dead_code)]
 impl ServerHandle {
     pub async fn shutdown(self) {
         let _ = self.shutdown_tx.send(());

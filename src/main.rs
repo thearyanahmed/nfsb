@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
-use tracing::{info, warn, Level};
+use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
 mod api;
