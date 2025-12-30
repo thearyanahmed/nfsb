@@ -5,6 +5,7 @@ use axum::{
     Json,
 };
 use std::path::PathBuf;
+use serde::Deserialize;
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -13,7 +14,8 @@ use crate::{benchmarks, metrics, report, storage, BenchmarkType, FileSize, Outpu
 
 use super::models::{
     ErrorResponse, HealthResponse, InfoRequest, InfoResponse, JobResultsResponse,
-    JobStatus, JobStatusResponse, ListJobsResponse, RunBenchmarkRequest, RunBenchmarkResponse,
+    JobStatus, JobStatusResponse, ListJobsResponse, ListMountsResponse, MountInfo,
+    MountRequest, MountResponse, RunBenchmarkRequest, RunBenchmarkResponse,
 };
 use super::state::AppState;
 
@@ -345,4 +347,167 @@ pub async fn delete_job(
         )
             .into_response(),
     }
+}
+
+/// POST /api/v1/mounts
+/// mount a filesystem (e.g., NFS share)
+pub async fn create_mount(Json(req): Json<MountRequest>) -> impl IntoResponse {
+    // create target directory if it doesn't exist
+    if let Err(e) = tokio::fs::create_dir_all(&req.target).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "mkdir_failed".to_string(),
+                message: format!("Failed to create mount point: {}", e),
+            }),
+        )
+            .into_response();
+    }
+
+    // build mount command
+    let mut cmd = tokio::process::Command::new("mount");
+    cmd.arg("-t").arg(&req.fstype);
+
+    if let Some(opts) = &req.options {
+        cmd.arg("-o").arg(opts);
+    }
+
+    cmd.arg(&req.source).arg(&req.target);
+
+    info!(
+        source = %req.source,
+        target = %req.target,
+        fstype = %req.fstype,
+        "Mounting filesystem"
+    );
+
+    match cmd.output().await {
+        Ok(output) => {
+            if output.status.success() {
+                let id = format!(
+                    "{:x}",
+                    md5_hash(&format!("{}:{}", req.source, req.target))
+                );
+                (
+                    StatusCode::CREATED,
+                    Json(MountResponse {
+                        id,
+                        source: req.source,
+                        target: req.target,
+                        fstype: req.fstype,
+                        status: "mounted".to_string(),
+                    }),
+                )
+                    .into_response()
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                error!(error = %stderr, "Mount failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: "mount_failed".to_string(),
+                        message: format!("Mount failed: {}", stderr.trim()),
+                    }),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "mount_error".to_string(),
+                message: format!("Failed to execute mount: {}", e),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// DELETE /api/v1/mounts
+/// unmount a filesystem by target path
+pub async fn delete_mount(Query(params): Query<UnmountParams>) -> impl IntoResponse {
+    let target = &params.target;
+
+    info!(target = %target, "Unmounting filesystem");
+
+    let output = tokio::process::Command::new("umount")
+        .arg(target)
+        .output()
+        .await;
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                (StatusCode::NO_CONTENT, ()).into_response()
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                error!(error = %stderr, "Unmount failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorResponse {
+                        error: "unmount_failed".to_string(),
+                        message: format!("Unmount failed: {}", stderr.trim()),
+                    }),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "unmount_error".to_string(),
+                message: format!("Failed to execute umount: {}", e),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UnmountParams {
+    pub target: String,
+}
+
+/// GET /api/v1/mounts
+/// list all current mounts
+pub async fn list_mounts() -> impl IntoResponse {
+    match tokio::fs::read_to_string("/proc/mounts").await {
+        Ok(contents) => {
+            let mounts: Vec<MountInfo> = contents
+                .lines()
+                .filter_map(|line| {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        Some(MountInfo {
+                            source: parts[0].to_string(),
+                            target: parts[1].to_string(),
+                            fstype: parts[2].to_string(),
+                            options: parts[3].to_string(),
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            (StatusCode::OK, Json(ListMountsResponse { mounts })).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: "read_mounts_failed".to_string(),
+                message: format!("Failed to read mounts: {}", e),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// simple hash for generating mount ids
+fn md5_hash(input: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
 }
