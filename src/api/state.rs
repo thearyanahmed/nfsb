@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use crate::metrics::Collector;
 use crate::report::BenchmarkReport;
 
 use super::types::JobStatus;
@@ -65,12 +66,14 @@ impl Job {
 #[derive(Clone)]
 pub struct AppState {
     jobs: Arc<RwLock<HashMap<Uuid, Job>>>,
+    pub collector: Arc<Collector>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             jobs: Arc::new(RwLock::new(HashMap::new())),
+            collector: Arc::new(Collector::new()),
         }
     }
 

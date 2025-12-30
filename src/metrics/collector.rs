@@ -1,12 +1,9 @@
-use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry};
-use std::sync::Arc;
+use prometheus::{CounterVec, GaugeVec, HistogramOpts, HistogramVec, Opts};
 use tracing::debug;
 
 /// Metrics collector for benchmark measurements
 #[derive(Clone)]
 pub struct Collector {
-    _registry: Arc<Registry>,
-
     // Counters
     pub bytes_written: CounterVec,
     pub bytes_read: CounterVec,
@@ -23,7 +20,6 @@ pub struct Collector {
 
 impl Collector {
     pub fn new() -> Self {
-        let registry = Registry::new();
 
         // Bytes written counter
         let bytes_written = CounterVec::new(
@@ -88,19 +84,19 @@ impl Collector {
         )
         .expect("Failed to create latency histogram");
 
-        // Register all metrics
-        registry.register(Box::new(bytes_written.clone())).unwrap();
-        registry.register(Box::new(bytes_read.clone())).unwrap();
-        registry.register(Box::new(operations_total.clone())).unwrap();
-        registry.register(Box::new(throughput_mbps.clone())).unwrap();
-        registry.register(Box::new(iops.clone())).unwrap();
-        registry.register(Box::new(operation_duration.clone())).unwrap();
-        registry.register(Box::new(latency.clone())).unwrap();
+        // Register all metrics with default registry
+        let registry = prometheus::default_registry();
+        registry.register(Box::new(bytes_written.clone())).expect("Failed to register bytes_written");
+        registry.register(Box::new(bytes_read.clone())).expect("Failed to register bytes_read");
+        registry.register(Box::new(operations_total.clone())).expect("Failed to register operations_total");
+        registry.register(Box::new(throughput_mbps.clone())).expect("Failed to register throughput_mbps");
+        registry.register(Box::new(iops.clone())).expect("Failed to register iops");
+        registry.register(Box::new(operation_duration.clone())).expect("Failed to register operation_duration");
+        registry.register(Box::new(latency.clone())).expect("Failed to register latency");
 
-        debug!("Metrics collector initialized");
+        debug!("Metrics collector initialized with default registry");
 
         Self {
-            _registry: Arc::new(registry),
             bytes_written,
             bytes_read,
             operations_total,

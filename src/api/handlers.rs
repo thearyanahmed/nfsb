@@ -161,8 +161,8 @@ async fn run_benchmark_job(state: AppState, job_id: Uuid, config: Config) {
         None
     };
 
-    // initialize metrics collector
-    let collector = metrics::Collector::new();
+    // use metrics collector from app state
+    let collector = state.collector.clone();
 
     state
         .update_job(job_id, |job| {
