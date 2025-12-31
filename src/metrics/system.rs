@@ -87,6 +87,12 @@ impl SystemMetrics {
     /// start background task that refreshes metrics every interval
     pub fn start_background_refresh(self: Arc<Self>, interval_secs: u64) {
         tokio::spawn(async move {
+            // sysinfo requires a delay between refreshes to calculate CPU usage
+            // the first refresh primes the counters, second refresh calculates delta
+            self.refresh().await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            self.refresh().await;
+
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
             loop {
                 interval.tick().await;
