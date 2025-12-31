@@ -560,6 +560,12 @@ fn get_endpoint_docs() -> Vec<EndpointDoc> {
             description: "Get environment info for a path".to_string(),
             curl_example: r#"curl "http://localhost:8080/api/v1/info?path=/mnt/nfs""#.to_string(),
         },
+        EndpointDoc {
+            method: "DELETE".to_string(),
+            path: "/api/v1/cleanup?path=<path>".to_string(),
+            description: "Remove a test directory (only under /tmp, /mnt, /data, /workspace)".to_string(),
+            curl_example: r#"curl -X DELETE "http://localhost:8080/api/v1/cleanup?path=/tmp/nfsb-test""#.to_string(),
+        },
     ]
 }
 
@@ -758,4 +764,62 @@ fn md5_hash(input: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
     hasher.finish()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CleanupParams {
+    /// path to the directory to remove
+    pub path: String,
+}
+
+/// DELETE /api/v1/cleanup?path=<path>
+/// remove a test directory
+pub async fn cleanup_directory(Query(params): Query<CleanupParams>) -> impl IntoResponse {
+    let path = PathBuf::from(&params.path);
+
+    // safety: only allow cleanup under /tmp, /mnt, /data, or /workspace
+    let allowed_prefixes = ["/tmp/", "/mnt/", "/data/", "/workspace/"];
+    let path_str = params.path.as_str();
+
+    if !allowed_prefixes.iter().any(|prefix| path_str.starts_with(prefix)) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "path_not_allowed".to_string(),
+                message: format!(
+                    "Cleanup only allowed under: {}",
+                    allowed_prefixes.join(", ")
+                ),
+            }),
+        )
+            .into_response();
+    }
+
+    if !path.exists() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "path_not_found".to_string(),
+                message: format!("Path does not exist: {}", params.path),
+            }),
+        )
+            .into_response();
+    }
+
+    info!(path = %params.path, "Cleaning up directory");
+
+    match tokio::fs::remove_dir_all(&path).await {
+        Ok(_) => (StatusCode::NO_CONTENT, ()).into_response(),
+        Err(e) => {
+            error!(path = %params.path, error = %e, "Failed to cleanup directory");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "cleanup_failed".to_string(),
+                    message: format!("Failed to remove directory: {}", e),
+                }),
+            )
+                .into_response()
+        }
+    }
 }

@@ -45,6 +45,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/jobs", get(handlers::list_jobs))
         // environment info
         .route("/api/v1/info", get(handlers::get_info))
+        // cleanup test directory
+        .route("/api/v1/cleanup", delete(handlers::cleanup_directory))
         // mount operations
         .route(
             "/api/v1/mounts",
