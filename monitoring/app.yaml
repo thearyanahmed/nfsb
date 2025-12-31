@@ -1,0 +1,39 @@
+name: nfsb-monitoring
+region: nyc
+
+services:
+  # Prometheus - scrapes metrics from nfsb instances
+  - name: prometheus
+    dockerfile_path: monitoring/prometheus/Dockerfile
+    source_dir: monitoring/prometheus
+    github:
+      repo: thearyanahmed/nfsb
+      branch: master
+      deploy_on_push: true
+    http_port: 9090
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    # internal port for grafana to connect
+    internal_ports:
+      - 9090
+    routes:
+      - path: /prometheus
+        preserve_path_prefix: true
+
+  # Grafana - dashboard UI
+  - name: grafana
+    dockerfile_path: monitoring/grafana/Dockerfile
+    source_dir: monitoring/grafana
+    github:
+      repo: thearyanahmed/nfsb
+      branch: master
+      deploy_on_push: true
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    routes:
+      - path: /
+    envs:
+      # internal URL for prometheus (App Platform format)
+      - key: PROMETHEUS_INTERNAL_URL
+        value: "${prometheus.PRIVATE_URL}:9090"
