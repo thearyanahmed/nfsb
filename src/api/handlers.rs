@@ -27,9 +27,9 @@ pub async fn run_benchmark(
     State(state): State<AppState>,
     Json(req): Json<RunBenchmarkRequest>,
 ) -> impl IntoResponse {
-    // validate path exists
-    let path = PathBuf::from(&req.path);
-    if !path.exists() {
+    // validate base path exists
+    let base_path = PathBuf::from(&req.path);
+    if !base_path.exists() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -39,6 +39,25 @@ pub async fn run_benchmark(
         )
             .into_response();
     }
+
+    // resolve test path (create subdirectory if test_dir specified)
+    let test_path = if let Some(ref dir_name) = req.test_dir {
+        let full_path = base_path.join(dir_name);
+        info!(path = %full_path.display(), "Creating test directory");
+        if let Err(e) = tokio::fs::create_dir_all(&full_path).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "mkdir_failed".to_string(),
+                    message: format!("Failed to create test directory: {}", e),
+                }),
+            )
+                .into_response();
+        }
+        full_path
+    } else {
+        base_path
+    };
 
     // parse benchmark type
     let benchmark_type = match req.benchmark.as_deref() {
@@ -90,7 +109,7 @@ pub async fn run_benchmark(
 
     // create the config
     let config = Config {
-        path,
+        path: test_path.clone(),
         output: None,
         benchmark: benchmark_type,
         sizes,
@@ -107,10 +126,17 @@ pub async fn run_benchmark(
     // capture environment overrides from request
     let env_overrides = (req.runtime.clone(), req.storage_type.clone(), req.run_id.clone());
 
+    // cleanup config: (should_cleanup, test_path)
+    let cleanup_config = if req.cleanup && req.test_dir.is_some() {
+        Some(test_path)
+    } else {
+        None
+    };
+
     // spawn background task to run the benchmark
     let state_clone = state.clone();
     tokio::spawn(async move {
-        run_benchmark_job(state_clone, job_id, config, env_overrides).await;
+        run_benchmark_job(state_clone, job_id, config, env_overrides, cleanup_config).await;
     });
 
     (
@@ -126,11 +152,13 @@ pub async fn run_benchmark(
 
 /// background task that runs the actual benchmark
 /// env_overrides: (runtime, storage_type, run_id) - optional overrides from request
+/// cleanup_path: if Some, remove this directory after benchmark completes
 async fn run_benchmark_job(
     state: AppState,
     job_id: Uuid,
     config: Config,
     env_overrides: (Option<String>, Option<String>, Option<String>),
+    cleanup_path: Option<PathBuf>,
 ) {
     // mark job as running
     state.update_job(job_id, |job| job.mark_running()).await;
@@ -237,6 +265,14 @@ async fn run_benchmark_job(
     state
         .update_job(job_id, |job| job.mark_completed(benchmark_report))
         .await;
+
+    // cleanup test directory if requested
+    if let Some(path) = cleanup_path {
+        info!(job_id = %job_id, path = %path.display(), "Cleaning up test directory");
+        if let Err(e) = tokio::fs::remove_dir_all(&path).await {
+            tracing::warn!(job_id = %job_id, error = %e, "Failed to cleanup test directory");
+        }
+    }
 
     info!(job_id = %job_id, "Benchmark job completed successfully");
 }

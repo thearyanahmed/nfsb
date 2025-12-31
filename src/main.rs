@@ -69,6 +69,14 @@ enum Commands {
         #[arg(short, long)]
         path: PathBuf,
 
+        /// Create a test subdirectory within path (e.g., --test-dir nfsb-test creates /mnt/nfs/nfsb-test)
+        #[arg(short = 'd', long)]
+        test_dir: Option<String>,
+
+        /// Clean up test directory after benchmarks complete
+        #[arg(long)]
+        cleanup: bool,
+
         /// Output file for JSON results
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -179,6 +187,8 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Run {
             path,
+            test_dir,
+            cleanup,
             output,
             benchmark,
             sizes,
@@ -187,8 +197,18 @@ async fn main() -> Result<()> {
             prometheus_port,
             no_warmup,
         } => {
+            // resolve the actual test path
+            let test_path = if let Some(ref dir_name) = test_dir {
+                let full_path = path.join(dir_name);
+                info!(path = %full_path.display(), "Creating test directory");
+                tokio::fs::create_dir_all(&full_path).await?;
+                full_path
+            } else {
+                path.clone()
+            };
+
             let config = Config {
-                path,
+                path: test_path.clone(),
                 output,
                 benchmark: benchmark.unwrap_or(BenchmarkType::All),
                 sizes,
@@ -199,7 +219,17 @@ async fn main() -> Result<()> {
                 format: cli.format,
             };
 
-            run_benchmarks(config).await?;
+            let result = run_benchmarks(config).await;
+
+            // cleanup test directory if requested
+            if cleanup && test_dir.is_some() {
+                info!(path = %test_path.display(), "Cleaning up test directory");
+                if let Err(e) = tokio::fs::remove_dir_all(&test_path).await {
+                    tracing::warn!(error = %e, "Failed to cleanup test directory");
+                }
+            }
+
+            result?;
         }
         Commands::Info { path } => {
             show_info(&path, cli.format).await?;

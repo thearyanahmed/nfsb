@@ -10,6 +10,14 @@ pub struct RunBenchmarkRequest {
     /// path to the directory to benchmark (e.g., /mnt/nfs)
     pub path: String,
 
+    /// create a test subdirectory within path (e.g., "nfsb-test" creates /mnt/nfs/nfsb-test)
+    #[serde(default)]
+    pub test_dir: Option<String>,
+
+    /// clean up test directory after benchmarks complete
+    #[serde(default)]
+    pub cleanup: bool,
+
     /// specific benchmark to run (default: all)
     /// options: sequential, random, concurrent, metadata, mixed, append, all
     #[serde(default)]
