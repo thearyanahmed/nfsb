@@ -1,5 +1,6 @@
-use prometheus::{Gauge, Opts};
+use prometheus::{Gauge, GaugeVec, Opts};
 use sysinfo::System;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
@@ -20,6 +21,8 @@ pub struct SystemMetrics {
     memory_used_bytes: Gauge,
     memory_total_bytes: Gauge,
     memory_usage_percent: Gauge,
+    mount_info: GaugeVec,
+    known_mounts: Arc<RwLock<HashSet<String>>>,
 }
 
 impl SystemMetrics {
@@ -43,6 +46,11 @@ impl SystemMetrics {
             Opts::new("nfsb_memory_usage_percent", "Memory usage percentage")
         ).expect("Failed to create memory_usage_percent gauge");
 
+        let mount_info = GaugeVec::new(
+            Opts::new("nfsb_mount_info", "Mounted filesystems (value=1 indicates mounted)"),
+            &["source", "target", "fstype"]
+        ).expect("Failed to create mount_info gauge");
+
         // register with default registry
         prometheus::default_registry()
             .register(Box::new(cpu_usage.clone()))
@@ -56,6 +64,9 @@ impl SystemMetrics {
         prometheus::default_registry()
             .register(Box::new(memory_usage_percent.clone()))
             .expect("Failed to register memory_usage_percent");
+        prometheus::default_registry()
+            .register(Box::new(mount_info.clone()))
+            .expect("Failed to register mount_info");
 
         debug!("System metrics initialized");
 
@@ -66,6 +77,8 @@ impl SystemMetrics {
             memory_used_bytes,
             memory_total_bytes,
             memory_usage_percent,
+            mount_info,
+            known_mounts: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -119,11 +132,63 @@ impl SystemMetrics {
         None
     }
 
+    /// refresh mount information from /proc/mounts
+    /// only tracks relevant mounts: nfs, /mnt/*, /data/*, /tmp
+    async fn refresh_mounts(&self) {
+        let contents = match std::fs::read_to_string("/proc/mounts") {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        let mut current_mounts = HashSet::new();
+
+        for line in contents.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let source = parts[0];
+                let target = parts[1];
+                let fstype = parts[2];
+
+                // filter to relevant mounts
+                let is_relevant = fstype.starts_with("nfs")
+                    || target.starts_with("/mnt")
+                    || target.starts_with("/data")
+                    || target == "/tmp";
+
+                if is_relevant {
+                    let key = format!("{}:{}:{}", source, target, fstype);
+                    current_mounts.insert(key.clone());
+
+                    self.mount_info
+                        .with_label_values(&[source, target, fstype])
+                        .set(1.0);
+                }
+            }
+        }
+
+        // remove stale mounts that no longer exist
+        let mut known = self.known_mounts.write().await;
+        for old_key in known.difference(&current_mounts) {
+            let parts: Vec<&str> = old_key.split(':').collect();
+            if parts.len() == 3 {
+                if let Err(_) = self.mount_info.remove_label_values(&[parts[0], parts[1], parts[2]]) {
+                    // ignore removal errors
+                }
+            }
+        }
+        *known = current_mounts;
+    }
+
     /// update all system metrics
     pub async fn refresh(&self) {
         let mut system = self.system.write().await;
         system.refresh_cpu_usage();
         system.refresh_memory();
+
+        // refresh mounts (drop the system lock first)
+        drop(system);
+        self.refresh_mounts().await;
+        let system = self.system.read().await;
 
         let num_cpus = system.cpus().len().max(1);
 
