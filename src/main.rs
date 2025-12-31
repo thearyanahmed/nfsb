@@ -232,8 +232,16 @@ async fn run_benchmarks(config: Config) -> Result<()> {
         None
     };
 
-    // Initialize metrics collector
-    let collector = metrics::Collector::new();
+    // Start system metrics collection (refresh every 1 second during benchmarks)
+    let system_metrics = std::sync::Arc::new(metrics::SystemMetrics::new());
+    system_metrics.clone().start_background_refresh(1);
+
+    // Initialize metrics collector with environment labels from detected environment
+    let env_labels = metrics::EnvironmentLabels::new(
+        env_info.runtime.to_string(),
+        env_info.storage_type.to_string(),
+    );
+    let collector = metrics::Collector::with_env(env_labels);
 
     // Run benchmarks
     let results = benchmarks::run_all(&config, &collector, &env_info).await?;

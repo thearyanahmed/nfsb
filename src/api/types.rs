@@ -35,6 +35,20 @@ pub struct RunBenchmarkRequest {
     /// skip warmup phase
     #[serde(default)]
     pub no_warmup: bool,
+
+    /// runtime environment (auto-detected if not specified)
+    /// options: gvisor, native, droplet
+    #[serde(default)]
+    pub runtime: Option<String>,
+
+    /// storage type being benchmarked (auto-detected if not specified)
+    /// options: nfs, ephemeral, block
+    #[serde(default)]
+    pub storage_type: Option<String>,
+
+    /// run identifier for grouping results in metrics
+    #[serde(default)]
+    pub run_id: Option<String>,
 }
 
 fn default_sizes() -> Vec<String> {

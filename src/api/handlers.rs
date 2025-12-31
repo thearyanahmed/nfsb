@@ -10,6 +10,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::metrics::EnvironmentLabels;
 use crate::{benchmarks, metrics, report, storage, BenchmarkType, FileSize, OutputFormat};
 
 use super::types::{
@@ -103,10 +104,13 @@ pub async fn run_benchmark(
     // create a new job
     let job_id = state.create_job().await;
 
+    // capture environment overrides from request
+    let env_overrides = (req.runtime.clone(), req.storage_type.clone(), req.run_id.clone());
+
     // spawn background task to run the benchmark
     let state_clone = state.clone();
     tokio::spawn(async move {
-        run_benchmark_job(state_clone, job_id, config).await;
+        run_benchmark_job(state_clone, job_id, config, env_overrides).await;
     });
 
     (
@@ -121,7 +125,13 @@ pub async fn run_benchmark(
 }
 
 /// background task that runs the actual benchmark
-async fn run_benchmark_job(state: AppState, job_id: Uuid, config: Config) {
+/// env_overrides: (runtime, storage_type, run_id) - optional overrides from request
+async fn run_benchmark_job(
+    state: AppState,
+    job_id: Uuid,
+    config: Config,
+    env_overrides: (Option<String>, Option<String>, Option<String>),
+) {
     // mark job as running
     state.update_job(job_id, |job| job.mark_running()).await;
 
@@ -140,6 +150,24 @@ async fn run_benchmark_job(state: AppState, job_id: Uuid, config: Config) {
             return;
         }
     };
+
+    // build environment labels: use overrides from request, fall back to auto-detected values
+    let (runtime_override, storage_override, run_id) = env_overrides;
+    let mut env_labels = EnvironmentLabels::new(
+        runtime_override.unwrap_or_else(|| env_info.runtime.to_string()),
+        storage_override.unwrap_or_else(|| env_info.storage_type.to_string()),
+    );
+    if let Some(rid) = run_id {
+        env_labels = env_labels.with_run_id(rid);
+    }
+
+    info!(
+        job_id = %job_id,
+        runtime = %env_labels.runtime,
+        storage_type = %env_labels.storage_type,
+        run_id = ?env_labels.run_id,
+        "Environment labels configured"
+    );
 
     state
         .update_job(job_id, |job| {
@@ -161,8 +189,9 @@ async fn run_benchmark_job(state: AppState, job_id: Uuid, config: Config) {
         None
     };
 
-    // use metrics collector from app state
+    // update collector with environment labels for this benchmark run
     let collector = state.collector.clone();
+    collector.set_environment(env_labels);
 
     state
         .update_job(job_id, |job| {
@@ -462,8 +491,8 @@ fn get_endpoint_docs() -> Vec<EndpointDoc> {
         EndpointDoc {
             method: "POST".to_string(),
             path: "/api/v1/benchmarks/run".to_string(),
-            description: "Start a benchmark job".to_string(),
-            curl_example: r#"curl -X POST http://localhost:8080/api/v1/benchmarks/run -H "Content-Type: application/json" -d '{"path": "/mnt/nfs", "benchmark": "sequential", "sizes": ["small", "medium"], "iterations": 50}'"#.to_string(),
+            description: "Start a benchmark job (supports optional runtime, storage_type, run_id labels)".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/benchmarks/run -H "Content-Type: application/json" -d '{"path": "/mnt/nfs", "runtime": "gvisor", "storage_type": "nfs", "run_id": "test-001"}'"#.to_string(),
         },
         EndpointDoc {
             method: "GET".to_string(),

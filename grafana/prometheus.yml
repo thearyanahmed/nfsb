@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # scrape nfsb metrics from the host machine
+  # when running nfsb locally, use host.docker.internal to reach the host
+  - job_name: 'nfsb'
+    static_configs:
+      - targets: ['host.docker.internal:9090']
+    # if running nfsb serve mode
+  - job_name: 'nfsb-api'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /metrics
