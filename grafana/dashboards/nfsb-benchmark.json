@@ -285,7 +285,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, operation, size) (rate(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.50, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
           "legendFormat": "p50 {{operation}} {{size}}",
           "refId": "A"
         }
@@ -330,7 +330,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, operation, size) (rate(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.95, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
           "legendFormat": "p95 {{operation}} {{size}}",
           "refId": "A"
         }
@@ -375,7 +375,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, operation, size) (rate(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[1m]))) * 1000",
+          "expr": "histogram_quantile(0.99, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
           "legendFormat": "p99 {{operation}} {{size}}",
           "refId": "A"
         }
@@ -577,7 +577,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, runtime, storage_type) (rate(nfsb_latency_seconds_bucket[5m]))) * 1000",
+          "expr": "histogram_quantile(0.95, sum by (le, runtime, storage_type) (increase(nfsb_latency_seconds_bucket[5m]))) * 1000",
           "legendFormat": "{{runtime}} / {{storage_type}}",
           "refId": "A"
         }
