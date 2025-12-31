@@ -1,7 +1,5 @@
 {
-  "annotations": {
-    "list": []
-  },
+  "annotations": { "list": [] },
   "description": "NFS Benchmark Tool - Performance Metrics Dashboard",
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -13,134 +11,6 @@
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
-      "id": 1,
-      "panels": [],
-      "title": "System Resources",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 50 },
-              { "color": "red", "value": 80 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
-      "id": 2,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "expr": "nfsb_cpu_usage_percent",
-          "legendFormat": "CPU Usage",
-          "refId": "A"
-        }
-      ],
-      "title": "CPU Usage",
-      "type": "gauge"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 60 },
-              { "color": "red", "value": 80 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 1 },
-      "id": 3,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "expr": "nfsb_memory_usage_percent",
-          "legendFormat": "Memory Usage",
-          "refId": "A"
-        }
-      ],
-      "title": "Memory Usage",
-      "type": "gauge"
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 1 },
-      "id": 4,
-      "options": {
-        "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "none" }
-      },
-      "targets": [
-        { "expr": "nfsb_cpu_usage_percent", "legendFormat": "CPU %", "refId": "A" },
-        { "expr": "nfsb_memory_usage_percent", "legendFormat": "Memory %", "refId": "B" }
-      ],
-      "title": "CPU & Memory Over Time",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
       "id": 5,
       "panels": [],
       "title": "Throughput & IOPS",
@@ -175,7 +45,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
       "id": 6,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -183,8 +53,8 @@
       },
       "targets": [
         {
-          "expr": "nfsb_throughput_mbps{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}",
-          "legendFormat": "{{operation}} {{size}} ({{runtime}}/{{storage_type}})",
+          "expr": "nfsb_throughput_mbps{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}",
+          "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
       ],
@@ -220,7 +90,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
       "id": 7,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -228,8 +98,8 @@
       },
       "targets": [
         {
-          "expr": "rate(nfsb_operations_total{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[1m])",
-          "legendFormat": "{{operation}} {{size}} ({{runtime}}/{{storage_type}})",
+          "expr": "rate(nfsb_operations_total{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[1m])",
+          "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
       ],
@@ -238,7 +108,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
       "id": 8,
       "panels": [],
       "title": "Latency Breakdown",
@@ -248,7 +118,7 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": { "fixedColor": "green", "mode": "fixed" },
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
@@ -271,13 +141,9 @@
           "mappings": [],
           "unit": "ms"
         },
-        "overrides": [
-          { "matcher": { "id": "byRegexp", "options": ".*p50.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
-          { "matcher": { "id": "byRegexp", "options": ".*p95.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
-          { "matcher": { "id": "byRegexp", "options": ".*p99.*" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
-        ]
+        "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 17 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
       "id": 9,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -285,8 +151,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
-          "legendFormat": "p50 {{operation}} {{size}}",
+          "expr": "histogram_quantile(0.50, sum by (le, instance, operation, size) (increase(nfsb_latency_seconds_bucket{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
+          "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
       ],
@@ -322,7 +188,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 17 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
       "id": 10,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -330,8 +196,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
-          "legendFormat": "p95 {{operation}} {{size}}",
+          "expr": "histogram_quantile(0.95, sum by (le, instance, operation, size) (increase(nfsb_latency_seconds_bucket{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
+          "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
       ],
@@ -367,7 +233,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 17 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
       "id": 11,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -375,8 +241,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum by (le, operation, size) (increase(nfsb_latency_seconds_bucket{runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
-          "legendFormat": "p99 {{operation}} {{size}}",
+          "expr": "histogram_quantile(0.99, sum by (le, instance, operation, size) (increase(nfsb_latency_seconds_bucket{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}[5m]))) * 1000",
+          "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
       ],
@@ -385,7 +251,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
       "id": 12,
       "panels": [],
       "title": "Totals",
@@ -402,7 +268,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 26 },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 19 },
       "id": 13,
       "options": {
         "colorMode": "value",
@@ -414,7 +280,7 @@
       },
       "targets": [
         {
-          "expr": "sum(nfsb_bytes_written_total{runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
+          "expr": "sum(nfsb_bytes_written_total{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
           "legendFormat": "Total Written",
           "refId": "A"
         }
@@ -433,7 +299,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 26 },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 19 },
       "id": 14,
       "options": {
         "colorMode": "value",
@@ -445,7 +311,7 @@
       },
       "targets": [
         {
-          "expr": "sum(nfsb_bytes_read_total{runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
+          "expr": "sum(nfsb_bytes_read_total{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
           "legendFormat": "Total Read",
           "refId": "A"
         }
@@ -464,7 +330,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 26 },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 19 },
       "id": 15,
       "options": {
         "colorMode": "value",
@@ -476,7 +342,7 @@
       },
       "targets": [
         {
-          "expr": "sum(nfsb_operations_total{runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
+          "expr": "sum(nfsb_operations_total{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\"})",
           "legendFormat": "Total Operations",
           "refId": "A"
         }
@@ -485,39 +351,8 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 26 },
-      "id": 16,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "nfsb_memory_used_bytes",
-          "legendFormat": "Memory Used",
-          "refId": "A"
-        }
-      ],
-      "title": "Memory Used",
-      "type": "stat"
-    },
-    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "id": 17,
       "panels": [],
       "title": "Environment Comparison",
@@ -534,7 +369,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
       "id": 18,
       "options": {
         "displayMode": "gradient",
@@ -546,12 +381,12 @@
       },
       "targets": [
         {
-          "expr": "avg by (runtime, storage_type) (nfsb_throughput_mbps)",
-          "legendFormat": "{{runtime}} / {{storage_type}}",
+          "expr": "avg by (instance) (nfsb_throughput_mbps{instance=~\"$instance\"})",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Avg Throughput by Environment",
+      "title": "Avg Throughput by Target",
       "type": "bargauge"
     },
     {
@@ -565,7 +400,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "id": 19,
       "options": {
         "displayMode": "gradient",
@@ -577,12 +412,12 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, runtime, storage_type) (increase(nfsb_latency_seconds_bucket[5m]))) * 1000",
-          "legendFormat": "{{runtime}} / {{storage_type}}",
+          "expr": "histogram_quantile(0.95, sum by (le, instance) (increase(nfsb_latency_seconds_bucket{instance=~\"$instance\"}[5m]))) * 1000",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Avg p95 Latency by Environment",
+      "title": "Avg p95 Latency by Target",
       "type": "bargauge"
     }
   ],
@@ -606,6 +441,24 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "definition": "label_values(nfsb_throughput_mbps, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Target",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": { "query": "label_values(nfsb_throughput_mbps, instance)", "refId": "PrometheusVariableQueryEditor-VariableQuery" },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       },
       {
         "allValue": ".*",
