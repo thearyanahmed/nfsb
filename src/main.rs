@@ -16,7 +16,7 @@ use config::Config;
 #[derive(Parser)]
 #[command(name = "nfsb")]
 #[command(author = "DigitalOcean App Platform Team")]
-#[command(version = "0.3.2")]
+#[command(version = "0.3.3")]
 #[command(about = "NFS benchmark tool for measuring file I/O performance")]
 struct Cli {
     #[command(subcommand)]
@@ -213,7 +213,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_benchmarks(config: Config) -> Result<()> {
-    info!("nfsb - NFS Benchmark Tool v0.3.2");
+    info!("nfsb - NFS Benchmark Tool v0.3.3");
 
     // Detect environment
     let env_info = storage::detect_environment(&config.path).await?;
