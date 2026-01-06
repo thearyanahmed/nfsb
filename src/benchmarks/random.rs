@@ -20,9 +20,11 @@ pub async fn run_random(config: &Config, collector: &Collector) -> Result<Vec<Be
     let mut results = Vec::new();
 
     for size in &config.sizes {
-        // Random Write
-        let write_result = run_random_write(config, collector, *size).await?;
-        results.push(write_result);
+        // Random Write (skip in read-only mode)
+        if !config.read_only {
+            let write_result = run_random_write(config, collector, *size).await?;
+            results.push(write_result);
+        }
 
         // Random Read
         let read_result = run_random_read(config, collector, *size).await?;
@@ -144,22 +146,32 @@ async fn run_random_read(
     size: FileSize,
 ) -> Result<BenchmarkResult> {
     let file_path = config.path.join(format!("nfsb_rand_read_{}.dat", size.name()));
-    let file_size = size.bytes();
     let iterations = RANDOM_ITERATIONS;
     let mut latencies = Vec::with_capacity(iterations as usize);
 
-    // Pre-create file with target size
-    let data = generate_random_data(file_size);
-    let mut file = File::create(&file_path).await?;
-    file.write_all(&data).await?;
-    file.sync_all().await?;
-    drop(file);
+    // Pre-create file with target size (skip in read-only mode)
+    if !config.read_only {
+        let data = generate_random_data(size.bytes());
+        let mut file = File::create(&file_path).await?;
+        file.write_all(&data).await?;
+        file.sync_all().await?;
+        drop(file);
+    } else if !file_path.exists() {
+        anyhow::bail!(
+            "Read-only mode: test file does not exist: {}. Run benchmark without read_only first.",
+            file_path.display()
+        );
+    }
+
+    // Get actual file size
+    let file_size = tokio::fs::metadata(&file_path).await?.len() as usize;
 
     info!(
         size = size.name(),
         file_size = file_size,
         block_size = BLOCK_SIZE,
         iterations = iterations,
+        read_only = config.read_only,
         "Starting random read benchmark"
     );
 
@@ -173,13 +185,13 @@ async fn run_random_read(
 
     let mut file = File::open(&file_path).await?;
     let mut buffer = vec![0u8; BLOCK_SIZE];
-    let max_offset = file_size - BLOCK_SIZE;
+    let max_offset = file_size.saturating_sub(BLOCK_SIZE);
 
     // pre-generate all random offsets to avoid holding RNG across await points
     let offsets: Vec<u64> = {
         let mut rng = rand::thread_rng();
         (0..iterations)
-            .map(|_| rng.gen_range(0..=max_offset) as u64)
+            .map(|_| if max_offset > 0 { rng.gen_range(0..=max_offset) as u64 } else { 0 })
             .collect()
     };
 
@@ -206,8 +218,10 @@ async fn run_random_read(
     pb.finish_with_message("done");
     drop(file);
 
-    // Clean up
-    tokio::fs::remove_file(&file_path).await?;
+    // Clean up (skip in read-only mode)
+    if !config.read_only {
+        tokio::fs::remove_file(&file_path).await?;
+    }
 
     let total_bytes = BLOCK_SIZE as u64 * iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;

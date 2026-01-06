@@ -57,6 +57,10 @@ pub struct RunBenchmarkRequest {
     /// run identifier for grouping results in metrics
     #[serde(default)]
     pub run_id: Option<String>,
+
+    /// read-only mode: skip all write benchmarks (for gVisor/NFS testing)
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 fn default_sizes() -> Vec<String> {

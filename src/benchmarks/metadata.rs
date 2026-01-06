@@ -14,13 +14,21 @@ const METADATA_ITERATIONS: u32 = 1000;
 pub async fn run_metadata(config: &Config, collector: &Collector) -> Result<Vec<BenchmarkResult>> {
     let mut results = Vec::new();
 
-    // File create/delete benchmark
-    let create_delete_result = run_create_delete(config, collector).await?;
-    results.push(create_delete_result);
+    // File create/delete benchmark (skip in read-only mode)
+    if !config.read_only {
+        let create_delete_result = run_create_delete(config, collector).await?;
+        results.push(create_delete_result);
+    } else {
+        info!("Skipping create/delete benchmark (read-only mode)");
+    }
 
-    // Directory operations benchmark
-    let dir_result = run_directory_ops(config, collector).await?;
-    results.push(dir_result);
+    // Directory operations benchmark (skip in read-only mode)
+    if !config.read_only {
+        let dir_result = run_directory_ops(config, collector).await?;
+        results.push(dir_result);
+    } else {
+        info!("Skipping directory operations benchmark (read-only mode)");
+    }
 
     // Stat operations benchmark
     let stat_result = run_stat_ops(config, collector).await?;
@@ -205,10 +213,21 @@ async fn run_stat_ops(config: &Config, collector: &Collector) -> Result<Benchmar
     let file_path = config.path.join("nfsb_stat_test.dat");
     let mut latencies = Vec::with_capacity(iterations as usize);
 
-    // Create test file
-    fs::write(&file_path, b"test data for stat operations").await?;
+    // Create test file (skip in read-only mode)
+    if !config.read_only {
+        fs::write(&file_path, b"test data for stat operations").await?;
+    } else if !file_path.exists() {
+        anyhow::bail!(
+            "Read-only mode: test file does not exist: {}. Run benchmark without read_only first.",
+            file_path.display()
+        );
+    }
 
-    info!(iterations = iterations, "Starting stat operations benchmark");
+    info!(
+        iterations = iterations,
+        read_only = config.read_only,
+        "Starting stat operations benchmark"
+    );
 
     let pb = ProgressBar::new(iterations as u64);
     pb.set_style(
@@ -236,8 +255,10 @@ async fn run_stat_ops(config: &Config, collector: &Collector) -> Result<Benchmar
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up
-    fs::remove_file(&file_path).await?;
+    // Clean up (skip in read-only mode)
+    if !config.read_only {
+        fs::remove_file(&file_path).await?;
+    }
 
     let ops_per_sec = iterations as f64 / total_duration;
     let latency_stats = Statistics::from_values(&latencies);

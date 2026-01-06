@@ -19,9 +19,11 @@ pub async fn run_concurrent(config: &Config, collector: &Collector) -> Result<Ve
 
     for &concurrency in &config.concurrency {
         for size in &config.sizes {
-            // Concurrent Write
-            let write_result = run_concurrent_write(config, collector, *size, concurrency).await?;
-            results.push(write_result);
+            // Concurrent Write (skip in read-only mode)
+            if !config.read_only {
+                let write_result = run_concurrent_write(config, collector, *size, concurrency).await?;
+                results.push(write_result);
+            }
 
             // Concurrent Read
             let read_result = run_concurrent_read(config, collector, *size, concurrency).await?;
@@ -169,27 +171,49 @@ async fn run_concurrent_read(
     let iterations_per_worker = config.iterations / concurrency;
     let total_iterations = iterations_per_worker * concurrency;
 
-    // Create test files for each worker
-    let data = generate_random_data(size.bytes());
+    // Create test files for each worker (skip in read-only mode)
     let mut test_files = Vec::new();
 
-    for worker_id in 0..concurrency {
-        let file_path = config.path.join(format!(
-            "nfsb_conc_read_{}_{}.dat",
-            size.name(),
-            worker_id
-        ));
-        let mut file = File::create(&file_path).await?;
-        file.write_all(&data).await?;
-        file.sync_all().await?;
-        test_files.push(file_path);
+    if !config.read_only {
+        let data = generate_random_data(size.bytes());
+        for worker_id in 0..concurrency {
+            let file_path = config.path.join(format!(
+                "nfsb_conc_read_{}_{}.dat",
+                size.name(),
+                worker_id
+            ));
+            let mut file = File::create(&file_path).await?;
+            file.write_all(&data).await?;
+            file.sync_all().await?;
+            test_files.push(file_path);
+        }
+    } else {
+        // Read-only mode: check that files exist
+        for worker_id in 0..concurrency {
+            let file_path = config.path.join(format!(
+                "nfsb_conc_read_{}_{}.dat",
+                size.name(),
+                worker_id
+            ));
+            if !file_path.exists() {
+                anyhow::bail!(
+                    "Read-only mode: test file does not exist: {}. Run benchmark without read_only first.",
+                    file_path.display()
+                );
+            }
+            test_files.push(file_path);
+        }
     }
+
+    // Get actual file size from first file
+    let file_size = tokio::fs::metadata(&test_files[0]).await?.len() as usize;
 
     info!(
         size = size.name(),
-        bytes = size.bytes(),
+        bytes = file_size,
         concurrency = concurrency,
         iterations_per_worker = iterations_per_worker,
+        read_only = config.read_only,
         "Starting concurrent read benchmark"
     );
 
@@ -215,7 +239,6 @@ async fn run_concurrent_read(
         let file_path = file_path.clone();
         let collector = collector.clone();
         let size_name = size.name().to_string();
-        let file_size = size.bytes();
 
         let handle = tokio::spawn(async move {
             let mut buffer = vec![0u8; file_size];
@@ -264,16 +287,18 @@ async fn run_concurrent_read(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up test files
-    for file_path in test_files {
-        tokio::fs::remove_file(&file_path).await?;
+    // Clean up test files (skip in read-only mode)
+    if !config.read_only {
+        for file_path in &test_files {
+            tokio::fs::remove_file(&file_path).await?;
+        }
     }
 
     let latencies = Arc::try_unwrap(latencies)
         .unwrap()
         .into_inner();
 
-    let total_bytes = size.bytes() as u64 * total_iterations as u64;
+    let total_bytes = file_size as u64 * total_iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;
     let latency_stats = Statistics::from_values(&latencies);
 

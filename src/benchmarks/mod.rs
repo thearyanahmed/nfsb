@@ -30,8 +30,12 @@ pub async fn run_all(
 ) -> Result<HashMap<String, Vec<BenchmarkResult>>> {
     let mut results: HashMap<String, Vec<BenchmarkResult>> = HashMap::new();
 
-    // Warmup phase
-    if config.warmup {
+    if config.read_only {
+        info!("Running in READ-ONLY mode - skipping all write benchmarks");
+    }
+
+    // Warmup phase (skip in read-only mode since warmup writes)
+    if config.warmup && !config.read_only {
         info!("Running warmup phase...");
         warmup(config).await?;
     }
@@ -58,14 +62,22 @@ pub async fn run_all(
             results.insert("metadata".to_string(), meta_results);
         }
         BenchmarkType::Mixed => {
-            info!("Running mixed read/write benchmarks");
-            let mixed_results = run_mixed(config, collector).await?;
-            results.insert("mixed".to_string(), mixed_results);
+            if config.read_only {
+                info!("Skipping mixed benchmarks (requires writes)");
+            } else {
+                info!("Running mixed read/write benchmarks");
+                let mixed_results = run_mixed(config, collector).await?;
+                results.insert("mixed".to_string(), mixed_results);
+            }
         }
         BenchmarkType::Append => {
-            info!("Running append benchmarks");
-            let append_results = run_append(config, collector).await?;
-            results.insert("append".to_string(), append_results);
+            if config.read_only {
+                info!("Skipping append benchmarks (requires writes)");
+            } else {
+                info!("Running append benchmarks");
+                let append_results = run_append(config, collector).await?;
+                results.insert("append".to_string(), append_results);
+            }
         }
         BenchmarkType::All => {
             info!("Running all benchmarks");
@@ -86,13 +98,18 @@ pub async fn run_all(
             let meta_results = run_metadata(config, collector).await?;
             results.insert("metadata".to_string(), meta_results);
 
-            info!("Running mixed read/write benchmarks");
-            let mixed_results = run_mixed(config, collector).await?;
-            results.insert("mixed".to_string(), mixed_results);
+            if config.read_only {
+                info!("Skipping mixed benchmarks (requires writes)");
+                info!("Skipping append benchmarks (requires writes)");
+            } else {
+                info!("Running mixed read/write benchmarks");
+                let mixed_results = run_mixed(config, collector).await?;
+                results.insert("mixed".to_string(), mixed_results);
 
-            info!("Running append benchmarks");
-            let append_results = run_append(config, collector).await?;
-            results.insert("append".to_string(), append_results);
+                info!("Running append benchmarks");
+                let append_results = run_append(config, collector).await?;
+                results.insert("append".to_string(), append_results);
+            }
         }
     }
 

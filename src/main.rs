@@ -217,6 +217,7 @@ async fn main() -> Result<()> {
                 prometheus_port,
                 warmup: !no_warmup,
                 format: cli.format,
+                read_only: false, // CLI mode doesn't support read-only (use API)
             };
 
             let result = run_benchmarks(config).await;

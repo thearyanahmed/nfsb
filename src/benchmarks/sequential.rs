@@ -16,9 +16,11 @@ pub async fn run_sequential(config: &Config, collector: &Collector) -> Result<Ve
     let mut results = Vec::new();
 
     for size in &config.sizes {
-        // Sequential Write
-        let write_result = run_sequential_write(config, collector, *size).await?;
-        results.push(write_result);
+        // Sequential Write (skip in read-only mode)
+        if !config.read_only {
+            let write_result = run_sequential_write(config, collector, *size).await?;
+            results.push(write_result);
+        }
 
         // Sequential Read
         let read_result = run_sequential_read(config, collector, *size).await?;
@@ -112,19 +114,34 @@ async fn run_sequential_read(
     size: FileSize,
 ) -> Result<BenchmarkResult> {
     let file_path = config.path.join(format!("nfsb_seq_read_{}.dat", size.name()));
-    let data = generate_random_data(size.bytes());
     let mut latencies = Vec::with_capacity(config.iterations as usize);
 
-    // Create test file
-    let mut file = File::create(&file_path).await?;
-    file.write_all(&data).await?;
-    file.sync_all().await?;
-    drop(file);
+    // Create test file (skip in read-only mode - expect file to exist)
+    if !config.read_only {
+        let data = generate_random_data(size.bytes());
+        let mut file = File::create(&file_path).await?;
+        file.write_all(&data).await?;
+        file.sync_all().await?;
+        drop(file);
+    } else if !file_path.exists() {
+        anyhow::bail!(
+            "Read-only mode: test file does not exist: {}. Run benchmark without read_only first to create test files.",
+            file_path.display()
+        );
+    }
+
+    // Get actual file size for read-only mode (in case it differs)
+    let actual_size = if config.read_only {
+        fs::metadata(&file_path).await?.len() as usize
+    } else {
+        size.bytes()
+    };
 
     info!(
         size = size.name(),
-        bytes = size.bytes(),
+        bytes = actual_size,
         iterations = config.iterations,
+        read_only = config.read_only,
         "Starting sequential read benchmark"
     );
 
@@ -137,7 +154,7 @@ async fn run_sequential_read(
     pb.set_message(format!("seq_read_{}", size.name()));
 
     let total_start = Instant::now();
-    let mut buffer = vec![0u8; size.bytes()];
+    let mut buffer = vec![0u8; actual_size];
 
     for i in 0..config.iterations {
         let iter_start = Instant::now();
@@ -149,7 +166,7 @@ async fn run_sequential_read(
         let latency = iter_start.elapsed().as_secs_f64();
         latencies.push(latency);
 
-        collector.record_read(size.name(), "sequential", size.bytes() as u64);
+        collector.record_read(size.name(), "sequential", actual_size as u64);
         collector.record_operation("read", size.name(), "sequential");
         collector.record_latency("read", size.name(), latency);
 
@@ -160,10 +177,12 @@ async fn run_sequential_read(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up
-    fs::remove_file(&file_path).await?;
+    // Clean up (skip in read-only mode - preserve files for future runs)
+    if !config.read_only {
+        fs::remove_file(&file_path).await?;
+    }
 
-    let total_bytes = size.bytes() as u64 * config.iterations as u64;
+    let total_bytes = actual_size as u64 * config.iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;
     let latency_stats = Statistics::from_values(&latencies);
 

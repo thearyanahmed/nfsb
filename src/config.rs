@@ -23,6 +23,8 @@ pub struct Config {
     pub warmup: bool,
     /// Output format
     pub format: OutputFormat,
+    /// Read-only mode: skip write benchmarks (for gVisor/NFS)
+    pub read_only: bool,
 }
 
 impl Default for Config {
@@ -37,6 +39,7 @@ impl Default for Config {
             prometheus_port: 9090,
             warmup: true,
             format: OutputFormat::Text,
+            read_only: false,
         }
     }
 }
