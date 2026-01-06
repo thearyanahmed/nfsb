@@ -9,7 +9,7 @@ services:
       branch: master
       deploy_on_push: true
     source_dir: grafana
-    dockerfile_path: prometheus.Dockerfile
+    dockerfile_path: grafana/prometheus.Dockerfile
     instance_size_slug: apps-s-1vcpu-0.5gb
     instance_count: 1
     internal_ports:
@@ -22,7 +22,7 @@ services:
       branch: master
       deploy_on_push: true
     source_dir: grafana
-    dockerfile_path: grafana.Dockerfile
+    dockerfile_path: grafana/grafana.Dockerfile
     http_port: 3000
     instance_size_slug: apps-s-1vcpu-0.5gb
     instance_count: 1
