@@ -115,8 +115,10 @@ async fn run_mixed_workload(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // clean up
-    fs::remove_file(&file_path).await?;
+    // clean up (skip if preserving test files)
+    if !config.preserve_test_files {
+        fs::remove_file(&file_path).await?;
+    }
 
     let total_bytes = size.bytes() as u64 * config.iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;

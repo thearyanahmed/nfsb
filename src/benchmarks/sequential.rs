@@ -78,8 +78,10 @@ async fn run_sequential_write(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up
-    fs::remove_file(&file_path).await?;
+    // Clean up (skip if preserving test files)
+    if !config.preserve_test_files {
+        fs::remove_file(&file_path).await?;
+    }
 
     let total_bytes = size.bytes() as u64 * config.iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;
@@ -177,8 +179,8 @@ async fn run_sequential_read(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up (skip in read-only mode - preserve files for future runs)
-    if !config.read_only {
+    // Clean up (skip in read-only mode or if preserving test files)
+    if !config.read_only && !config.preserve_test_files {
         fs::remove_file(&file_path).await?;
     }
 

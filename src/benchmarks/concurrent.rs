@@ -67,6 +67,7 @@ async fn run_concurrent_write(
 
     let mut handles = Vec::new();
 
+    let preserve_files = config.preserve_test_files;
     for worker_id in 0..concurrency {
         let data = Arc::clone(&data);
         let pb = Arc::clone(&pb);
@@ -105,8 +106,10 @@ async fn run_concurrent_write(
 
                 pb.inc(1);
 
-                // Clean up
-                tokio::fs::remove_file(&file_path).await?;
+                // Clean up (skip if preserving test files)
+                if !preserve_files {
+                    tokio::fs::remove_file(&file_path).await?;
+                }
 
                 debug!(
                     worker = worker_id,
@@ -287,8 +290,8 @@ async fn run_concurrent_read(
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up test files (skip in read-only mode)
-    if !config.read_only {
+    // Clean up test files (skip in read-only mode or if preserving test files)
+    if !config.read_only && !config.preserve_test_files {
         for file_path in &test_files {
             tokio::fs::remove_file(&file_path).await?;
         }

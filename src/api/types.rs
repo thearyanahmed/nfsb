@@ -61,6 +61,11 @@ pub struct RunBenchmarkRequest {
     /// read-only mode: skip all write benchmarks (for gVisor/NFS testing)
     #[serde(default)]
     pub read_only: bool,
+
+    /// preserve test files after benchmarks complete (for subsequent read-only tests)
+    /// when true, benchmark test files (e.g., nfsb_seq_read_*.dat) are NOT deleted
+    #[serde(default)]
+    pub preserve_test_files: bool,
 }
 
 fn default_sizes() -> Vec<String> {

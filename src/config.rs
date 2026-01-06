@@ -25,6 +25,8 @@ pub struct Config {
     pub format: OutputFormat,
     /// Read-only mode: skip write benchmarks (for gVisor/NFS)
     pub read_only: bool,
+    /// Preserve test files after benchmarks (for subsequent read-only tests)
+    pub preserve_test_files: bool,
 }
 
 impl Default for Config {
@@ -40,6 +42,7 @@ impl Default for Config {
             warmup: true,
             format: OutputFormat::Text,
             read_only: false,
+            preserve_test_files: false,
         }
     }
 }

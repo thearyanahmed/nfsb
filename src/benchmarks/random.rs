@@ -107,8 +107,10 @@ async fn run_random_write(
     pb.finish_with_message("done");
     drop(file);
 
-    // Clean up
-    tokio::fs::remove_file(&file_path).await?;
+    // Clean up (skip if preserving test files)
+    if !config.preserve_test_files {
+        tokio::fs::remove_file(&file_path).await?;
+    }
 
     let total_bytes = BLOCK_SIZE as u64 * iterations as u64;
     let throughput_mbps = (total_bytes as f64 / 1024.0 / 1024.0) / total_duration;
@@ -218,8 +220,8 @@ async fn run_random_read(
     pb.finish_with_message("done");
     drop(file);
 
-    // Clean up (skip in read-only mode)
-    if !config.read_only {
+    // Clean up (skip in read-only mode or if preserving test files)
+    if !config.read_only && !config.preserve_test_files {
         tokio::fs::remove_file(&file_path).await?;
     }
 

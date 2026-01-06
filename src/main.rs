@@ -218,6 +218,7 @@ async fn main() -> Result<()> {
                 warmup: !no_warmup,
                 format: cli.format,
                 read_only: false, // CLI mode doesn't support read-only (use API)
+                preserve_test_files: false,
             };
 
             let result = run_benchmarks(config).await;

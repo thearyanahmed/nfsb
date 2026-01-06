@@ -255,8 +255,8 @@ async fn run_stat_ops(config: &Config, collector: &Collector) -> Result<Benchmar
     let total_duration = total_start.elapsed().as_secs_f64();
     pb.finish_with_message("done");
 
-    // Clean up (skip in read-only mode)
-    if !config.read_only {
+    // Clean up (skip in read-only mode or if preserving test files)
+    if !config.read_only && !config.preserve_test_files {
         fs::remove_file(&file_path).await?;
     }
 

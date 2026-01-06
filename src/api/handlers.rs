@@ -119,6 +119,7 @@ pub async fn run_benchmark(
         warmup: !req.no_warmup && !req.read_only, // skip warmup in read-only mode (warmup writes)
         format: OutputFormat::Json,
         read_only: req.read_only,
+        preserve_test_files: req.preserve_test_files,
     };
 
     // create a new job
