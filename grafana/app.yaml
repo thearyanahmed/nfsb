@@ -29,6 +29,9 @@ services:
     envs:
       - key: GF_SECURITY_ADMIN_USER
         value: admin
+      - key: GF_SECURITY_ADMIN_PASSWORD
+        value: <REQUIRED>
+        type: SECRET
       - key: GF_USERS_ALLOW_SIGN_UP
         value: "false"
       - key: GF_AUTH_ANONYMOUS_ENABLED
