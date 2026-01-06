@@ -7,19 +7,12 @@ scrape_configs:
   - job_name: 'nfsb-gvisor'
     scheme: https
     static_configs:
-      - targets: ['YOUR_GVISOR_APP.ondigitalocean.app']
+      - targets: ['app-with-gvisor-iyp8d.onstagingocean.app']
     metrics_path: /metrics
 
   # nfsb without gVisor (App Platform with runtime override)
   - job_name: 'nfsb-native'
     scheme: https
     static_configs:
-      - targets: ['YOUR_NATIVE_APP.ondigitalocean.app']
-    metrics_path: /metrics
-
-  # nfsb on Droplet
-  - job_name: 'nfsb-droplet'
-    scheme: http
-    static_configs:
-      - targets: ['YOUR_DROPLET_IP:8080']
+      - targets: ['app-without-gvisor-gqteg.onstagingocean.app']
     metrics_path: /metrics
