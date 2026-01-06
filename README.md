@@ -34,10 +34,13 @@ Then open http://localhost:8080/ to see system status and API documentation.
 ## Features
 
 - **Sequential I/O**: Measures throughput for sequential read/write operations
-- **Random I/O**: Measures IOPS and latency for random access patterns
-- **Concurrent I/O**: Tests multi-threaded file operations
+- **Random I/O**: Measures IOPS and latency for random access patterns (4KB blocks)
+- **Concurrent I/O**: Tests multi-threaded file operations with configurable concurrency
 - **Metadata Operations**: Benchmarks file create/delete, directory operations, and stat calls
-- **Prometheus Metrics**: Built-in HTTP server for metric scraping
+- **Mixed Workload**: 70% read / 30% write mixed operations
+- **Append Operations**: Continuous append to growing files
+- **Read-Only Mode**: Skip write benchmarks for environments where writes are blocked (e.g., gVisor + NFS)
+- **Prometheus Metrics**: Built-in HTTP server for metric scraping with gauge reset on benchmark completion
 - **JSON Reports**: Structured output for analysis
 - **Environment Detection**: Auto-detects gVisor vs runc runtime
 
@@ -65,6 +68,7 @@ nfsb serve --port 8080
 |--------|------|-------------|
 | GET | `/` | System status, jobs, mounts, and API docs |
 | GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics |
 | POST | `/api/v1/mounts` | Mount a filesystem |
 | GET | `/api/v1/mounts` | List all mounts |
 | DELETE | `/api/v1/mounts?target=<path>` | Unmount a filesystem |
@@ -74,6 +78,7 @@ nfsb serve --port 8080
 | DELETE | `/api/v1/benchmarks/:id` | Delete a job |
 | GET | `/api/v1/jobs` | List all jobs |
 | GET | `/api/v1/info?path=<path>` | Get environment info |
+| DELETE | `/api/v1/cleanup?path=<path>` | Remove a test directory |
 
 ### Example: Mount NFS and Run Benchmark
 
@@ -113,29 +118,52 @@ curl -X POST http://localhost:8080/api/v1/benchmarks/run \
 # compare results from both job IDs
 ```
 
+### Example: Cleanup Test Directory
+
+```bash
+# remove test files after benchmarks
+curl -X DELETE "http://localhost:8080/api/v1/cleanup?path=/mnt/nfs/nfsb-bench"
+```
+
+Only directories under `/tmp/`, `/mnt/`, `/data/`, or `/workspace/` can be cleaned up (safety restriction).
+
 ### Benchmark Request Options
 
 ```json
 {
   "path": "/mnt/nfs",
+  "test_dir": "nfsb-bench",
+  "cleanup": true,
   "benchmark": "all",
   "sizes": ["small", "medium", "large"],
   "iterations": 100,
   "concurrency": [1, 4, 8, 16],
   "prometheus_port": 9090,
-  "no_warmup": false
+  "no_warmup": false,
+  "read_only": false,
+  "preserve_test_files": false,
+  "runtime": "gvisor",
+  "storage_type": "nfs",
+  "run_id": "test-001"
 }
 ```
 
-| Field | Default | Options |
-|-------|---------|---------|
+| Field | Default | Description |
+|-------|---------|-------------|
 | `path` | required | Path to benchmark directory |
-| `benchmark` | `all` | `sequential`, `random`, `concurrent`, `metadata`, `all` |
+| `test_dir` | `null` | Create subdirectory within path (e.g., `"nfsb-bench"` creates `/mnt/nfs/nfsb-bench`) |
+| `cleanup` | `false` | Remove test directory after benchmarks complete |
+| `benchmark` | `all` | `sequential`, `random`, `concurrent`, `metadata`, `mixed`, `append`, `all` |
 | `sizes` | `["small","medium","large"]` | `small` (4KB), `medium` (1MB), `large` (100MB) |
 | `iterations` | `100` | Number of iterations per test |
 | `concurrency` | `[1,4,8,16]` | Concurrency levels for concurrent tests |
 | `prometheus_port` | `9090` | Port for metrics (0 to disable) |
 | `no_warmup` | `false` | Skip warmup phase |
+| `read_only` | `false` | Skip all write benchmarks (for gVisor + NFS) |
+| `preserve_test_files` | `false` | Keep test files after benchmarks (for subsequent read-only tests) |
+| `runtime` | auto-detected | Override runtime label: `gvisor`, `native`, `droplet` |
+| `storage_type` | auto-detected | Override storage type label: `nfs`, `ephemeral`, `block` |
+| `run_id` | `null` | Identifier for grouping results in Prometheus metrics |
 
 ## CLI Usage
 
@@ -152,6 +180,8 @@ nfsb run --path /mnt/nfs --benchmark sequential
 nfsb run --path /mnt/nfs --benchmark random
 nfsb run --path /mnt/nfs --benchmark concurrent
 nfsb run --path /mnt/nfs --benchmark metadata
+nfsb run --path /mnt/nfs --benchmark mixed
+nfsb run --path /mnt/nfs --benchmark append
 ```
 
 ### Configure file sizes
@@ -192,6 +222,35 @@ This ensures:
 ```bash
 nfsb run --path /mnt/nfs --iterations 200
 ```
+
+### Read-only mode (for gVisor + NFS)
+
+When writes are blocked (e.g., gVisor with NFS due to [gVisor #11383](https://github.com/google/gvisor/issues/11383)), use read-only mode:
+
+```bash
+# Step 1: Create test files on a writable environment (e.g., runc)
+curl -X POST http://<writable-app>/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/mnt/nfs",
+    "test_dir": "nfsb-bench",
+    "preserve_test_files": true
+  }'
+
+# Step 2: Run read-only benchmarks on gVisor environment
+curl -X POST http://<gvisor-app>/api/v1/benchmarks/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/mnt/nfs/nfsb-bench",
+    "read_only": true,
+    "benchmark": "all"
+  }'
+```
+
+In read-only mode:
+- All write benchmarks are skipped
+- Warmup phase is skipped (warmup writes to test filesystem)
+- Test files must already exist (created by a previous writable benchmark run)
 
 ### Configure concurrency levels
 
@@ -324,6 +383,29 @@ Detection methods:
 - `/proc/1/cgroup` for container detection
 - `/proc/mounts` for filesystem type
 
+## Source Code Structure
+
+### Benchmark Implementations
+
+| Benchmark | File | Entry Function |
+|-----------|------|----------------|
+| Sequential | [`src/benchmarks/sequential.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/sequential.rs) | `run_sequential()` |
+| Random | [`src/benchmarks/random.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/random.rs) | `run_random()` |
+| Concurrent | [`src/benchmarks/concurrent.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/concurrent.rs) | `run_concurrent()` |
+| Metadata | [`src/benchmarks/metadata.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/metadata.rs) | `run_metadata()` |
+| Mixed | [`src/benchmarks/mixed.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/mixed.rs) | `run_mixed()` |
+| Append | [`src/benchmarks/append.rs`](https://github.com/thearyanahmed/nfsb/blob/master/src/benchmarks/append.rs) | `run_append()` |
+
+### Key Modules
+
+| Module | Description |
+|--------|-------------|
+| `src/api/` | REST API handlers and types |
+| `src/benchmarks/` | Benchmark implementations |
+| `src/metrics/` | Prometheus metrics collection |
+| `src/report/` | JSON report generation |
+| `src/storage/` | Environment and storage detection |
+
 ## Development
 
 ### Run tests
@@ -356,11 +438,15 @@ We're testing NFS performance across different runtime environments to determine
 | Test | gVisor + NFS | gVisor + Ephemeral | runc + NFS | runc + Ephemeral |
 |------|--------------|-------------------|------------|------------------|
 | Sequential Read | ✓ | ✓ | ✓ | ✓ |
-| Sequential Write | ✓ | ✓ | ✓ | ✓ |
+| Sequential Write | ✗ (blocked) | ✓ | ✓ | ✓ |
 | Random Read | ✓ | ✓ | ✓ | ✓ |
-| Random Write | ✓ | ✓ | ✓ | ✓ |
-| Concurrent I/O | ✓ | ✓ | ✓ | ✓ |
-| Metadata Ops | ✓ | ✓ | ✓ | ✓ |
+| Random Write | ✗ (blocked) | ✓ | ✓ | ✓ |
+| Concurrent I/O | read-only | ✓ | ✓ | ✓ |
+| Metadata Ops | stat only | ✓ | ✓ | ✓ |
+| Mixed Workload | ✗ (blocked) | ✓ | ✓ | ✓ |
+| Append | ✗ (blocked) | ✓ | ✓ | ✓ |
+
+**Note:** gVisor + NFS writes are blocked due to [gVisor #11383](https://github.com/google/gvisor/issues/11383). Use `read_only: true` for gVisor + NFS benchmarks.
 
 ### Step-by-Step Testing Guide
 
