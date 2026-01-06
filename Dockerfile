@@ -34,10 +34,10 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# create directory for benchmark data
-RUN mkdir -p /data
+# create directory for benchmark
+RUN mkdir -p /workspace
 
-WORKDIR /data
+WORKDIR /workspace
 
 # prometheus metrics port
 EXPOSE 9090

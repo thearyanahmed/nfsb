@@ -1,0 +1,57 @@
+name: nfs-monitoring
+region: nyc
+
+services:
+  # prometheus - scrapes metrics from nfsb benchmark app
+  - name: prometheus
+    github:
+      repo: thearyanahmed/nfsb
+      branch: main
+      deploy_on_push: true
+    source_dir: grafana
+    dockerfile_path: prometheus.Dockerfile
+    http_port: 9090
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    health_check:
+      http_path: /-/healthy
+      initial_delay_seconds: 10
+      period_seconds: 10
+    internal_ports:
+      - 9090
+
+  # grafana - visualization dashboard
+  - name: grafana
+    github:
+      repo: thearyanahmed/nfsb
+      branch: main
+      deploy_on_push: true
+    source_dir: grafana
+    dockerfile_path: grafana.Dockerfile
+    http_port: 3000
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    envs:
+      - key: GF_SECURITY_ADMIN_USER
+        value: admin
+      - key: GF_SECURITY_ADMIN_PASSWORD
+        value: nfsb2024!
+        type: SECRET
+      - key: GF_USERS_ALLOW_SIGN_UP
+        value: "false"
+      - key: GF_AUTH_ANONYMOUS_ENABLED
+        value: "true"
+      - key: GF_AUTH_ANONYMOUS_ORG_ROLE
+        value: Viewer
+    health_check:
+      http_path: /api/health
+      initial_delay_seconds: 15
+      period_seconds: 10
+
+ingress:
+  rules:
+    - component:
+        name: grafana
+      match:
+        path:
+          prefix: /

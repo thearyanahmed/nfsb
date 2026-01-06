@@ -3,20 +3,14 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
-  # scrape from staging app
+  # scrape from staging nfsb app (gvisor environment)
   - job_name: 'nfsb-staging'
     scheme: https
     static_configs:
-      - targets: ['nfsb-76rng.onstagingocean.app']
+      - targets: ['nfsb-c4skh.onstagingocean.app']
     metrics_path: /metrics
-
-  # scrape nfsb metrics from the host machine (local dev)
-  - job_name: 'nfsb'
-    static_configs:
-      - targets: ['host.docker.internal:9090']
-
-  # if running nfsb serve mode locally
-  - job_name: 'nfsb-api'
-    static_configs:
-      - targets: ['host.docker.internal:8080']
-    metrics_path: /metrics
+    # relabel to add environment info
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: environment
+        replacement: staging

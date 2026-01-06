@@ -4,6 +4,9 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
+    # in App Platform, services communicate via component name on internal port
     url: http://prometheus:9090
     isDefault: true
     editable: true
+    jsonData:
+      timeInterval: "5s"
