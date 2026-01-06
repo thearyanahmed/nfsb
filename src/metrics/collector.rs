@@ -240,12 +240,10 @@ impl Collector {
         debug!("Benchmark marked as active");
     }
 
-    /// Mark benchmark as stopped - sets active gauge to 0 and resets throughput/iops gauges
+    /// Mark benchmark as stopped - sets active gauge to 0
     pub fn benchmark_stopped(&self) {
         self.benchmark_active.set(0.0);
-        self.throughput_mbps.reset();
-        self.iops.reset();
-        debug!("Benchmark marked as inactive, gauges reset");
+        debug!("Benchmark marked as inactive");
     }
 }
 
