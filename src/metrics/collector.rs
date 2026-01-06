@@ -52,6 +52,7 @@ pub struct Collector {
     // Gauges
     pub throughput_mbps: GaugeVec,
     pub iops: GaugeVec,
+    pub benchmark_active: prometheus::Gauge,
 
     // Histograms
     pub operation_duration: HistogramVec,
@@ -120,6 +121,13 @@ impl Collector {
         )
         .expect("Failed to create latency histogram");
 
+        // Benchmark active indicator (1 = running, 0 = idle)
+        let benchmark_active = prometheus::Gauge::new(
+            "nfsb_benchmark_active",
+            "Whether a benchmark is currently running (1 = active, 0 = idle)",
+        )
+        .expect("Failed to create benchmark_active gauge");
+
         // Register all metrics with default registry
         let registry = prometheus::default_registry();
         registry.register(Box::new(bytes_written.clone())).expect("Failed to register bytes_written");
@@ -129,6 +137,7 @@ impl Collector {
         registry.register(Box::new(iops.clone())).expect("Failed to register iops");
         registry.register(Box::new(operation_duration.clone())).expect("Failed to register operation_duration");
         registry.register(Box::new(latency.clone())).expect("Failed to register latency");
+        registry.register(Box::new(benchmark_active.clone())).expect("Failed to register benchmark_active");
 
         debug!(
             runtime = %env_labels.runtime,
@@ -143,6 +152,7 @@ impl Collector {
             operations_total,
             throughput_mbps,
             iops,
+            benchmark_active,
             operation_duration,
             latency,
         }
@@ -222,6 +232,20 @@ impl Collector {
         self.latency
             .with_label_values(&[operation, size, &env.runtime, &env.storage_type])
             .observe(latency_secs);
+    }
+
+    /// Mark benchmark as started - sets active gauge to 1
+    pub fn benchmark_started(&self) {
+        self.benchmark_active.set(1.0);
+        debug!("Benchmark marked as active");
+    }
+
+    /// Mark benchmark as stopped - sets active gauge to 0 and resets throughput/iops gauges
+    pub fn benchmark_stopped(&self) {
+        self.benchmark_active.set(0.0);
+        self.throughput_mbps.reset();
+        self.iops.reset();
+        debug!("Benchmark marked as inactive, gauges reset");
     }
 }
 

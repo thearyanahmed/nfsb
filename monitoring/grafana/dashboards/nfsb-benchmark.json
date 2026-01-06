@@ -9,8 +9,41 @@
   "liveNow": false,
   "panels": [
     {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "dark-red", "index": 0, "text": "IDLE" } }, "type": "value" },
+            { "options": { "1": { "color": "dark-green", "index": 1, "text": "RUNNING" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 3, "w": 4, "x": 0, "y": 0 },
+      "id": 20,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "expr": "nfsb_benchmark_active",
+          "legendFormat": "Status",
+          "refId": "A"
+        }
+      ],
+      "title": "Benchmark Status",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 3 },
       "id": 5,
       "panels": [],
       "title": "Throughput & IOPS",
@@ -53,7 +86,7 @@
       },
       "targets": [
         {
-          "expr": "nfsb_throughput_mbps{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"}",
+          "expr": "nfsb_throughput_mbps{instance=~\"$instance\", runtime=~\"$runtime\", storage_type=~\"$storage_type\", operation=~\"$operation\", size=~\"$size\"} * on() group_left nfsb_benchmark_active",
           "legendFormat": "{{instance}} {{operation}} {{size}}",
           "refId": "A"
         }
@@ -381,7 +414,7 @@
       },
       "targets": [
         {
-          "expr": "avg by (instance) (nfsb_throughput_mbps{instance=~\"$instance\"})",
+          "expr": "avg by (instance) (nfsb_throughput_mbps{instance=~\"$instance\"}) * on() group_left nfsb_benchmark_active",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
