@@ -222,7 +222,6 @@ async fn run_benchmark_job(
     // update collector with environment labels for this benchmark run
     let collector = state.collector.clone();
     collector.set_environment(env_labels);
-    collector.benchmark_started();
 
     state
         .update_job(job_id, |job| {
@@ -235,7 +234,7 @@ async fn run_benchmark_job(
         Ok(r) => r,
         Err(e) => {
             error!(job_id = %job_id, error = %e, "Benchmark execution failed");
-            collector.benchmark_stopped();
+            collector.reset_gauges();
             state
                 .update_job(job_id, |job| {
                     job.mark_failed(format!("Benchmark execution failed: {}", e))
@@ -256,7 +255,7 @@ async fn run_benchmark_job(
         Ok(r) => r,
         Err(e) => {
             error!(job_id = %job_id, error = %e, "Failed to generate report");
-            collector.benchmark_stopped();
+            collector.reset_gauges();
             state
                 .update_job(job_id, |job| {
                     job.mark_failed(format!("Failed to generate report: {}", e))
@@ -272,7 +271,7 @@ async fn run_benchmark_job(
         .await;
 
     // reset gauges now that benchmark is done
-    collector.benchmark_stopped();
+    collector.reset_gauges();
 
     // cleanup test directory if requested
     if let Some(path) = cleanup_path {
