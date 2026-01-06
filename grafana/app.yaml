@@ -29,15 +29,12 @@ services:
     envs:
       - key: GF_SECURITY_ADMIN_USER
         value: admin
-      - key: GF_SECURITY_ADMIN_PASSWORD
-        value: nfsb2024!
-        type: SECRET
       - key: GF_USERS_ALLOW_SIGN_UP
         value: "false"
       - key: GF_AUTH_ANONYMOUS_ENABLED
-        value: "true"
-      - key: GF_AUTH_ANONYMOUS_ORG_ROLE
-        value: Viewer
+        value: "false"
+      - key: GF_USERS_DEFAULT_THEME
+        value: light
     health_check:
       http_path: /api/health
       initial_delay_seconds: 15
