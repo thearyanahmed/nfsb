@@ -7,7 +7,7 @@ scrape_configs:
   - job_name: 'nfsb-staging'
     scheme: https
     static_configs:
-      - targets: ['app-without-gvisor-gqteg.onstagingocean.app', 'app-with-gvisor-iyp8d.onstagingocean.app']
+      - targets: ['app-without-gvisor-gqteg.onstagingocean.app', 'app-with-gvisor-iyp8d.onstagingocean.app', 'app-with-kata-ssw6q.onstagingocean.app']
     metrics_path: /metrics
     # relabel to add environment info
     relabel_configs:
