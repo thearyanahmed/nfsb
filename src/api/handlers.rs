@@ -573,6 +573,67 @@ fn get_endpoint_docs() -> Vec<EndpointDoc> {
             description: "Remove a test directory (only under /tmp, /mnt, /data, /workspace)".to_string(),
             curl_example: r#"curl -X DELETE "http://localhost:8080/api/v1/cleanup?path=/tmp/nfsb-test""#.to_string(),
         },
+        // simulation endpoints for multi-app NFS testing
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/log-writer/write".to_string(),
+            description: "Write log entries (simulates nginx/app logs)".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/log-writer/write -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "app_name": "nginx", "entries": 100, "log_type": "access"}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/log-analyzer/analyze".to_string(),
+            description: "Analyze logs and write reports (cross-app read/write)".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/log-analyzer/analyze -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "source_app": "nginx", "log_type": "access"}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/file-uploader/upload".to_string(),
+            description: "Upload file (simulates Laravel uploads)".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/file-uploader/upload -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "app_name": "shop", "filename": "image.jpg", "size_bytes": 102400}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/file-uploader/list".to_string(),
+            description: "List uploaded files".to_string(),
+            curl_example: r#"curl "http://localhost:8080/api/v1/file-uploader/list?base_path=/mnt/nfs&app_name=shop""#.to_string(),
+        },
+        EndpointDoc {
+            method: "DELETE".to_string(),
+            path: "/api/v1/file-uploader/delete".to_string(),
+            description: "Delete uploaded file".to_string(),
+            curl_example: r#"curl -X DELETE http://localhost:8080/api/v1/file-uploader/delete -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "app_name": "shop", "filename": "image.jpg"}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/report-generator/generate".to_string(),
+            description: "Generate periodic reports".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/report-generator/generate -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "app_name": "app-a", "report_type": "metrics", "data_points": 100}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "POST".to_string(),
+            path: "/api/v1/report-aggregator/aggregate".to_string(),
+            description: "Aggregate reports from multiple apps".to_string(),
+            curl_example: r#"curl -X POST http://localhost:8080/api/v1/report-aggregator/aggregate -H "Content-Type: application/json" -d '{"base_path": "/mnt/nfs", "source_apps": ["app-a", "app-b"], "output_name": "combined", "report_type": "metrics"}'"#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/ownership/check".to_string(),
+            description: "Check file/directory ownership".to_string(),
+            curl_example: r#"curl "http://localhost:8080/api/v1/ownership/check?path=/mnt/nfs/logs""#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/ownership/tree".to_string(),
+            description: "Get ownership tree for a directory".to_string(),
+            curl_example: r#"curl "http://localhost:8080/api/v1/ownership/tree?path=/mnt/nfs""#.to_string(),
+        },
+        EndpointDoc {
+            method: "GET".to_string(),
+            path: "/api/v1/exec".to_string(),
+            description: "Execute shell command (debugging)".to_string(),
+            curl_example: r#"curl "http://localhost:8080/api/v1/exec?cmd=ls%20-la&cwd=/mnt/nfs""#.to_string(),
+        },
     ]
 }
 
