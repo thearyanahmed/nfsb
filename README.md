@@ -187,6 +187,29 @@ curl -X DELETE "http://localhost:8080/api/v1/cleanup?path=/mnt/nfs/nfsb-bench"
 
 Only directories under `/tmp/`, `/mnt/`, `/data/`, or `/workspace/` can be cleaned up (safety restriction).
 
+### Example: Execute Shell Command
+
+```bash
+# run a command in the container
+curl "http://localhost:8080/api/v1/exec?cmd=ls%20-la&cwd=/mnt/nfs"
+
+# check disk usage
+curl "http://localhost:8080/api/v1/exec?cmd=df%20-h"
+
+# view /proc/mounts
+curl "http://localhost:8080/api/v1/exec?cmd=cat%20/proc/mounts"
+```
+
+### Example: Check File Ownership
+
+```bash
+# check ownership of a specific file
+curl "http://localhost:8080/api/v1/ownership/check?path=/mnt/nfs/test.txt"
+
+# list all files with ownership info
+curl "http://localhost:8080/api/v1/ownership/tree?path=/mnt/nfs"
+```
+
 ### Benchmark Request Options
 
 ```json
