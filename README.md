@@ -17,7 +17,7 @@ NFS read/write operations work on gVisor with patches 0.1 and 0.2 applied to the
 
 ### File Ownership Behavior
 
-Due to NFS root_squash, all files created from App Platform containers are owned by `nobody:nogroup` (uid 65534). This is expected:
+Due to NFS root_squash, all files created from gVisor containers are owned by `nobody:nogroup` (uid 65534). This is expected:
 
 - gVisor gofer process runs as root
 - NFS server squashes root to nobody
@@ -26,18 +26,17 @@ Due to NFS root_squash, all files created from App Platform containers are owned
 
 **Implications:**
 - `chown()` calls silently succeed but files remain owned by nobody
-- Files created from a Droplet (non-root user) will have different ownership
-- Both Droplet and App Platform can read each other's files
+- Files created from non-root users will have different ownership
 - Write access depends on file permissions (default 644 allows owner-only writes)
 
 ## Test Environments
 
 | Environment | Runtime | Storage | Purpose |
 |-------------|---------|---------|---------|
-| **Env 1** | gVisor (patched) | NFS | App Platform with NFS mounted |
-| **Env 2** | gVisor (patched) | Ephemeral | App Platform baseline |
-| **Env 3** | runc | NFS | Container without gVisor sandbox |
-| **Env 4** | runc | Ephemeral | Container baseline without gVisor |
+| **Env 1** | gVisor (patched) | NFS | gVisor container with NFS mounted |
+| **Env 2** | gVisor (patched) | Ephemeral | gVisor container baseline |
+| **Env 3** | runc | NFS | Standard container with NFS |
+| **Env 4** | runc | Ephemeral | Standard container baseline |
 
 ## Quick Start
 
@@ -240,7 +239,7 @@ curl "http://localhost:8080/api/v1/ownership/tree?path=/mnt/nfs"
 | `no_warmup` | `false` | Skip warmup phase |
 | `read_only` | `false` | Skip all write benchmarks (only needed for unpatched gVisor + NFS) |
 | `preserve_test_files` | `false` | Keep test files after benchmarks (for subsequent read-only tests) |
-| `runtime` | auto-detected | Override runtime label: `gvisor`, `native`, `droplet` |
+| `runtime` | auto-detected | Override runtime label: `gvisor`, `runc`, `native` |
 | `storage_type` | auto-detected | Override storage type label: `nfs`, `ephemeral`, `block` |
 | `run_id` | `null` | Identifier for grouping results in Prometheus metrics |
 
@@ -425,10 +424,10 @@ Access:
 Run benchmarks in both environments and compare:
 
 ```bash
-# In gVisor container (patched App Platform)
+# In gVisor container
 nfsb run --path /mnt/nfs --output gvisor-results.json
 
-# In runc container (modified pod spec)
+# In runc container
 nfsb run --path /mnt/nfs --output runc-results.json
 ```
 
@@ -512,7 +511,7 @@ cargo fmt
 
 ### Overview
 
-We're testing NFS performance across different runtime environments to determine if gVisor's overhead makes NFS unusable on App Platform.
+Testing NFS performance across different runtime environments to measure gVisor's overhead on NFS operations.
 
 ### Test Matrix
 
@@ -531,50 +530,29 @@ We're testing NFS performance across different runtime environments to determine
 
 ### Step-by-Step Testing Guide
 
-#### 1. Deploy to App Platform
+#### 1. Start the Server
 
 ```bash
-# deploy using the app spec
-doctl apps create --spec app.yaml
+# run locally
+make serve
+
+# or with docker
+make docker-run
 ```
 
-#### 2. Get the App URL
+#### 2. Check System Status
 
 ```bash
-doctl apps list
-# note the live URL
-```
-
-#### 3. Check System Status
-
-```bash
-curl https://<app-url>/
+curl http://localhost:8080/
 ```
 
 This returns current jobs, mounts, and API documentation.
 
-#### 4. Mount NFS Share (via kubectl patch)
-
-NFS volumes are mounted via Kubernetes deployment patches:
+#### 3. Run Benchmarks
 
 ```bash
-appctl cluster kubectl <cluster-id> -- -n <namespace> patch deployment app --type=strategic -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "volumes": [{"name": "nfs-storage", "nfs": {"server": "<nfs-ip>", "path": "/<account-id>/<share-id>"}}],
-        "containers": [{"name": "app", "volumeMounts": [{"name": "nfs-storage", "mountPath": "/mnt/nfs"}]}]
-      }
-    }
-  }
-}'
-```
-
-#### 5. Run Benchmarks
-
-```bash
-# test NFS performance
-curl -X POST https://<app-url>/api/v1/benchmarks/run \
+# test NFS performance (if NFS is mounted)
+curl -X POST http://localhost:8080/api/v1/benchmarks/run \
   -H "Content-Type: application/json" \
   -d '{
     "path": "/mnt/nfs",
@@ -586,30 +564,30 @@ curl -X POST https://<app-url>/api/v1/benchmarks/run \
 # save the job_id from response
 JOB_ID="<job-id-from-response>"
 
-# test ephemeral storage for comparison
-curl -X POST https://<app-url>/api/v1/benchmarks/run \
+# test local storage for comparison
+curl -X POST http://localhost:8080/api/v1/benchmarks/run \
   -H "Content-Type: application/json" \
   -d '{
-    "path": "/data",
+    "path": "/tmp",
     "benchmark": "all",
     "sizes": ["small", "medium", "large"],
     "iterations": 100
   }'
 ```
 
-#### 6. Monitor Progress
+#### 4. Monitor Progress
 
 ```bash
-curl https://<app-url>/api/v1/benchmarks/$JOB_ID/status
+curl http://localhost:8080/api/v1/benchmarks/$JOB_ID/status
 ```
 
-#### 7. Get Results
+#### 5. Get Results
 
 ```bash
-curl https://<app-url>/api/v1/benchmarks/$JOB_ID/results | jq .
+curl http://localhost:8080/api/v1/benchmarks/$JOB_ID/results | jq .
 ```
 
-#### 8. Compare Results
+#### 6. Compare Results
 
 Key metrics to compare:
 - **Throughput (MB/s)**: Higher is better
@@ -636,21 +614,23 @@ Key metrics to compare:
 #### Mount fails
 
 ```bash
-# verify NFS server connectivity from the container
-kubectl exec -it <pod> -- ping <nfs-ip>
+# verify NFS server connectivity
+ping <nfs-ip>
 
 # check if NFS mount point exists
-kubectl exec -it <pod> -- ls -la /mnt/nfs
+ls -la /mnt/nfs
+
+# check mount options
+cat /proc/mounts | grep nfs
 ```
 
 #### Benchmark hangs
 
 ```bash
 # check job status
-curl https://<app-url>/api/v1/benchmarks/$JOB_ID/status
+curl http://localhost:8080/api/v1/benchmarks/$JOB_ID/status
 
-# check app logs
-doctl apps logs <app-id>
+# check server logs
 ```
 
 #### Permission denied on file creation
@@ -671,39 +651,32 @@ This is expected behavior with patched gVisor due to NFS root_squash:
 - Files are created with nobody:nogroup ownership
 - Applications can still read/write (permissions are 644/755)
 
-## App Platform Deployment
+## Docker Deployment
 
-### Using app.yaml
-
-```yaml
-name: nfsb
-services:
-- name: nfsb
-  github:
-    repo: thearyanahmed/nfsb
-    branch: master
-  dockerfile_path: Dockerfile
-  http_port: 8080
-  instance_size_slug: apps-s-1vcpu-2gb
-  instance_count: 1
-  health_check:
-    http_path: /health
-```
-
-### Deploy
+### Build and Run
 
 ```bash
-doctl apps create --spec app.yaml
+# build docker image
+make docker-build
+
+# run container
+make docker-run
+
+# or manually
+docker build -t nfsb .
+docker run -p 8080:8080 nfsb
 ```
 
-### Update
+### With NFS Volume
 
 ```bash
-doctl apps update <app-id> --spec app.yaml
+docker run -p 8080:8080 \
+  -v /mnt/nfs:/mnt/nfs \
+  --cap-add SYS_ADMIN \
+  nfsb
 ```
 
 ## References
 
 - [gVisor #11383](https://github.com/google/gvisor/issues/11383) - `disable_file_handle_sharing` NFS write issue
 - [gVisor #575](https://github.com/google/gvisor/issues/575) - NFS root_squash fchown EPERM issue
-- [DigitalOcean NFS Documentation](https://docs.digitalocean.com/products/nfs/)
