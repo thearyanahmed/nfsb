@@ -32,12 +32,20 @@ RUN apt-get update && apt-get install -y \
     nfs-common \
     && rm -rf /var/lib/apt/lists/*
 
+# create non-root user
+RUN groupadd --gid 1000 nfsb && \
+    useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home nfsb
+
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# create directory for benchmark
-RUN mkdir -p /workspace
+# create directories and set ownership
+RUN mkdir -p /workspace && \
+    chown -R nfsb:nfsb /workspace
 
 WORKDIR /workspace
+
+# switch to non-root user
+USER nfsb
 
 # prometheus metrics port
 EXPOSE 9090
