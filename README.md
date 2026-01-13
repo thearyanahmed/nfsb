@@ -1,10 +1,6 @@
 # nfsb - NFS Benchmark Tool
 
-A Rust CLI and REST API tool for benchmarking NFS performance on DigitalOcean App Platform, specifically measuring the impact of gVisor on file I/O operations.
-
-## Purpose
-
-Before building NFS support for App Platform, we need to benchmark how gVisor impacts NFS performance. This tool helps determine if NFS + gVisor is viable or if performance bottlenecks make it unusable.
+A Rust CLI and REST API tool for benchmarking NFS performance. 
 
 ## gVisor + NFS Status
 
