@@ -6,12 +6,40 @@ A Rust CLI and REST API tool for benchmarking NFS performance on DigitalOcean Ap
 
 Before building NFS support for App Platform, we need to benchmark how gVisor impacts NFS performance. This tool helps determine if NFS + gVisor is viable or if performance bottlenecks make it unusable.
 
+## gVisor + NFS Status
+
+**Status: WORKING** (with patched gVisor)
+
+NFS read/write operations work on gVisor with patches 0.1 and 0.2 applied to the runsc binary.
+
+### Patches Required
+
+| Patch | Purpose | File |
+|-------|---------|------|
+| **0.1** | Skip `disable_file_handle_sharing` for NFS | `runsc/cmd/gofer.go` |
+| **0.2** | Skip `fchown` on NFS when EPERM (root_squash) | `runsc/fsgofer/lisafs.go` |
+
+### File Ownership Behavior
+
+Due to NFS root_squash, all files created from App Platform containers are owned by `nobody:nogroup` (uid 65534). This is expected:
+
+- gVisor gofer process runs as root
+- NFS server squashes root to nobody
+- Files are created with nobody ownership
+- Applications can still read/write files (permissions are 644/755)
+
+**Implications:**
+- `chown()` calls silently succeed but files remain owned by nobody
+- Files created from a Droplet (non-root user) will have different ownership
+- Both Droplet and App Platform can read each other's files
+- Write access depends on file permissions (default 644 allows owner-only writes)
+
 ## Test Environments
 
 | Environment | Runtime | Storage | Purpose |
 |-------------|---------|---------|---------|
-| **Env 1** | gVisor | NFS | Default App Platform with NFS mounted |
-| **Env 2** | gVisor | Ephemeral | Default App Platform baseline |
+| **Env 1** | gVisor (patched) | NFS | App Platform with NFS mounted |
+| **Env 2** | gVisor (patched) | Ephemeral | App Platform baseline |
 | **Env 3** | runc | NFS | Container without gVisor sandbox |
 | **Env 4** | runc | Ephemeral | Container baseline without gVisor |
 
@@ -39,7 +67,7 @@ Then open http://localhost:8080/ to see system status and API documentation.
 - **Metadata Operations**: Benchmarks file create/delete, directory operations, and stat calls
 - **Mixed Workload**: 70% read / 30% write mixed operations
 - **Append Operations**: Continuous append to growing files
-- **Read-Only Mode**: Skip write benchmarks for environments where writes are blocked (e.g., gVisor + NFS)
+- **Read-Only Mode**: Skip write benchmarks for environments where writes are blocked (unpatched gVisor)
 - **Prometheus Metrics**: Built-in HTTP server for metric scraping with gauge reset on benchmark completion
 - **JSON Reports**: Structured output for analysis
 - **Environment Detection**: Auto-detects gVisor vs runc runtime
@@ -159,7 +187,7 @@ Only directories under `/tmp/`, `/mnt/`, `/data/`, or `/workspace/` can be clean
 | `concurrency` | `[1,4,8,16]` | Concurrency levels for concurrent tests |
 | `prometheus_port` | `9090` | Port for metrics (0 to disable) |
 | `no_warmup` | `false` | Skip warmup phase |
-| `read_only` | `false` | Skip all write benchmarks (for gVisor + NFS) |
+| `read_only` | `false` | Skip all write benchmarks (only needed for unpatched gVisor + NFS) |
 | `preserve_test_files` | `false` | Keep test files after benchmarks (for subsequent read-only tests) |
 | `runtime` | auto-detected | Override runtime label: `gvisor`, `native`, `droplet` |
 | `storage_type` | auto-detected | Override storage type label: `nfs`, `ephemeral`, `block` |
@@ -223,12 +251,12 @@ This ensures:
 nfsb run --path /mnt/nfs --iterations 200
 ```
 
-### Read-only mode (for gVisor + NFS)
+### Read-only mode (for unpatched gVisor + NFS)
 
-When writes are blocked (e.g., gVisor with NFS due to [gVisor #11383](https://github.com/google/gvisor/issues/11383)), use read-only mode:
+When writes are blocked (unpatched gVisor with NFS due to [gVisor #11383](https://github.com/google/gvisor/issues/11383)), use read-only mode:
 
 ```bash
-# Step 1: Create test files on a writable environment (e.g., runc)
+# Step 1: Create test files on a writable environment (e.g., runc or patched gVisor)
 curl -X POST http://<writable-app>/api/v1/benchmarks/run \
   -H "Content-Type: application/json" \
   -d '{
@@ -237,7 +265,7 @@ curl -X POST http://<writable-app>/api/v1/benchmarks/run \
     "preserve_test_files": true
   }'
 
-# Step 2: Run read-only benchmarks on gVisor environment
+# Step 2: Run read-only benchmarks on unpatched gVisor environment
 curl -X POST http://<gvisor-app>/api/v1/benchmarks/run \
   -H "Content-Type: application/json" \
   -d '{
@@ -251,6 +279,8 @@ In read-only mode:
 - All write benchmarks are skipped
 - Warmup phase is skipped (warmup writes to test filesystem)
 - Test files must already exist (created by a previous writable benchmark run)
+
+**Note:** With patched gVisor (patches 0.1 + 0.2), read-only mode is not needed.
 
 ### Configure concurrency levels
 
@@ -344,7 +374,7 @@ Access:
 Run benchmarks in both environments and compare:
 
 ```bash
-# In gVisor container (default App Platform)
+# In gVisor container (patched App Platform)
 nfsb run --path /mnt/nfs --output gvisor-results.json
 
 # In runc container (modified pod spec)
@@ -435,18 +465,18 @@ We're testing NFS performance across different runtime environments to determine
 
 ### Test Matrix
 
-| Test | gVisor + NFS | gVisor + Ephemeral | runc + NFS | runc + Ephemeral |
-|------|--------------|-------------------|------------|------------------|
+| Test | gVisor (patched) + NFS | gVisor + Ephemeral | runc + NFS | runc + Ephemeral |
+|------|------------------------|-------------------|------------|------------------|
 | Sequential Read | ✓ | ✓ | ✓ | ✓ |
-| Sequential Write | ✗ (blocked) | ✓ | ✓ | ✓ |
+| Sequential Write | ✓ | ✓ | ✓ | ✓ |
 | Random Read | ✓ | ✓ | ✓ | ✓ |
-| Random Write | ✗ (blocked) | ✓ | ✓ | ✓ |
-| Concurrent I/O | read-only | ✓ | ✓ | ✓ |
-| Metadata Ops | stat only | ✓ | ✓ | ✓ |
-| Mixed Workload | ✗ (blocked) | ✓ | ✓ | ✓ |
-| Append | ✗ (blocked) | ✓ | ✓ | ✓ |
+| Random Write | ✓ | ✓ | ✓ | ✓ |
+| Concurrent I/O | ✓ | ✓ | ✓ | ✓ |
+| Metadata Ops | ✓ | ✓ | ✓ | ✓ |
+| Mixed Workload | ✓ | ✓ | ✓ | ✓ |
+| Append | ✓ | ✓ | ✓ | ✓ |
 
-**Note:** gVisor + NFS writes are blocked due to [gVisor #11383](https://github.com/google/gvisor/issues/11383). Use `read_only: true` for gVisor + NFS benchmarks.
+**Note:** With patched gVisor (patches 0.1 + 0.2), all operations work. Unpatched gVisor blocks NFS writes due to [gVisor #11383](https://github.com/google/gvisor/issues/11383).
 
 ### Step-by-Step Testing Guide
 
@@ -472,17 +502,21 @@ curl https://<app-url>/
 
 This returns current jobs, mounts, and API documentation.
 
-#### 4. Mount NFS Share
+#### 4. Mount NFS Share (via kubectl patch)
+
+NFS volumes are mounted via Kubernetes deployment patches:
 
 ```bash
-curl -X POST https://<app-url>/api/v1/mounts \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "<nfs-server>:/export",
-    "target": "/mnt/nfs",
-    "fstype": "nfs",
-    "options": "rw,hard,intr"
-  }'
+appctl cluster kubectl <cluster-id> -- -n <namespace> patch deployment app --type=strategic -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [{"name": "nfs-storage", "nfs": {"server": "<nfs-ip>", "path": "/<account-id>/<share-id>"}}],
+        "containers": [{"name": "app", "volumeMounts": [{"name": "nfs-storage", "mountPath": "/mnt/nfs"}]}]
+      }
+    }
+  }
+}'
 ```
 
 #### 5. Run Benchmarks
@@ -551,9 +585,11 @@ Key metrics to compare:
 #### Mount fails
 
 ```bash
-# check if nfs-common is installed (should be in Docker image)
-# check NFS server connectivity
-# verify NFS export permissions
+# verify NFS server connectivity from the container
+kubectl exec -it <pod> -- ping <nfs-ip>
+
+# check if NFS mount point exists
+kubectl exec -it <pod> -- ls -la /mnt/nfs
 ```
 
 #### Benchmark hangs
@@ -566,12 +602,23 @@ curl https://<app-url>/api/v1/benchmarks/$JOB_ID/status
 doctl apps logs <app-id>
 ```
 
-#### Permission denied
+#### Permission denied on file creation
 
-```bash
-# NFS export may need to allow the container's UID
-# Check NFS server exports: /etc/exports
-```
+If running **unpatched gVisor**:
+- NFS writes are blocked due to [gVisor #11383](https://github.com/google/gvisor/issues/11383)
+- Use `read_only: true` mode or apply patches 0.1 + 0.2
+
+If running **patched gVisor**:
+- Check NFS export permissions on the server
+- Verify the NFS share allows writes
+
+#### Files owned by nobody:nogroup
+
+This is expected behavior with patched gVisor due to NFS root_squash:
+- gVisor runs as root
+- NFS server squashes root to nobody (uid 65534)
+- Files are created with nobody:nogroup ownership
+- Applications can still read/write (permissions are 644/755)
 
 ## App Platform Deployment
 
@@ -603,3 +650,9 @@ doctl apps create --spec app.yaml
 ```bash
 doctl apps update <app-id> --spec app.yaml
 ```
+
+## References
+
+- [gVisor #11383](https://github.com/google/gvisor/issues/11383) - `disable_file_handle_sharing` NFS write issue
+- [gVisor #575](https://github.com/google/gvisor/issues/575) - NFS root_squash fchown EPERM issue
+- [DigitalOcean NFS Documentation](https://docs.digitalocean.com/products/nfs/)
