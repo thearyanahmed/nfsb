@@ -92,14 +92,18 @@ nfsb serve --port 8080
 
 ### Endpoints
 
+#### Core Endpoints
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | System status, jobs, mounts, and API docs |
 | GET | `/health` | Health check |
 | GET | `/metrics` | Prometheus metrics |
-| POST | `/api/v1/mounts` | Mount a filesystem |
-| GET | `/api/v1/mounts` | List all mounts |
-| DELETE | `/api/v1/mounts?target=<path>` | Unmount a filesystem |
+
+#### Benchmark Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
 | POST | `/api/v1/benchmarks/run` | Start a benchmark job |
 | GET | `/api/v1/benchmarks/:id/status` | Get job status |
 | GET | `/api/v1/benchmarks/:id/results` | Get job results |
@@ -107,6 +111,34 @@ nfsb serve --port 8080
 | GET | `/api/v1/jobs` | List all jobs |
 | GET | `/api/v1/info?path=<path>` | Get environment info |
 | DELETE | `/api/v1/cleanup?path=<path>` | Remove a test directory |
+
+#### Mount Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/mounts` | Mount a filesystem |
+| GET | `/api/v1/mounts` | List all mounts |
+| DELETE | `/api/v1/mounts?target=<path>` | Unmount a filesystem |
+
+#### Simulation Endpoints (Multi-App NFS Testing)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/log-writer/write` | Write log entries (simulates nginx/app logs) |
+| POST | `/api/v1/log-analyzer/analyze` | Analyze logs and write reports |
+| POST | `/api/v1/file-uploader/upload` | Upload file (simulates Laravel-style uploads) |
+| GET | `/api/v1/file-uploader/list` | List uploaded files |
+| DELETE | `/api/v1/file-uploader/delete` | Delete uploaded file |
+| POST | `/api/v1/report-generator/generate` | Generate periodic reports |
+| POST | `/api/v1/report-aggregator/aggregate` | Aggregate reports from multiple sources |
+
+#### Utility Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/ownership/check?path=<path>` | Check file ownership |
+| GET | `/api/v1/ownership/tree?path=<path>` | List files with ownership info |
+| GET | `/api/v1/exec?cmd=<cmd>&cwd=<path>` | Execute shell command (for debugging) |
 
 ### Example: Mount NFS and Run Benchmark
 
