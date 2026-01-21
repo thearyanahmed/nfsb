@@ -34,15 +34,14 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# create nfsb user and group
-RUN groupadd -r nfsb && useradd -r -g nfsb nfsb
-
-# create directories with proper ownership
-RUN mkdir -p /workspace && chown nfsb:nfsb /workspace
+# create workspace directory
+RUN mkdir -p /workspace
 
 WORKDIR /workspace
 
-USER nfsb
+# run as root for NFS validation with gVisor
+# gVisor gofer runs as root, root_squash maps to nobody
+# running container as root allows full NFS functionality
 
 # prometheus metrics port
 EXPOSE 9090
