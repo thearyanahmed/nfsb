@@ -34,13 +34,15 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# create directories
-RUN mkdir -p /workspace
+# create nfsb user and group
+RUN groupadd -r nfsb && useradd -r -g nfsb nfsb
+
+# create directories with proper ownership
+RUN mkdir -p /workspace && chown nfsb:nfsb /workspace
 
 WORKDIR /workspace
 
-# run as root for NFS testing
-USER root
+USER nfsb
 
 # prometheus metrics port
 EXPOSE 9090
