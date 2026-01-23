@@ -45,6 +45,9 @@ sysinfo = "0.30"
 anyhow = "1.0"
 thiserror = "1.0"
 
+# System calls (for tests)
+libc = "0.2"
+
 # Logging
 log = "0.4"
 env_logger = "0.11"

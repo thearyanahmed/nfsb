@@ -654,6 +654,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "indicatif",
+ "libc",
  "log",
  "prometheus",
  "rand",
