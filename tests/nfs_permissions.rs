@@ -6,6 +6,9 @@
 //!
 //! Environment variable:
 //!   NFS_TEST_PATH - path to NFS mount (default: /mnt/nfs)
+//!
+//! Expected: ALL tests should PASS if NFS permissions work correctly.
+//! If a test fails, that operation doesn't work on the current runtime.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
@@ -43,8 +46,7 @@ fn cleanup_test_dir(path: &Path) {
 fn current_user_info() -> String {
     let uid = unsafe { libc::getuid() };
     let gid = unsafe { libc::getgid() };
-    let euid = unsafe { libc::geteuid() };
-    format!("uid={}, gid={}, euid={}", uid, gid, euid)
+    format!("uid={}, gid={}", uid, gid)
 }
 
 /// print test header with user context
@@ -64,12 +66,9 @@ fn test_create_file() {
     let file_path = test_dir.join("new_file.txt");
 
     let result = File::create(&file_path);
-    assert!(result.is_ok(), "failed to create file: {:?}", result.err());
-
-    // verify file exists
+    assert!(result.is_ok(), "CREATE FILE FAILED: {:?}", result.err());
     assert!(file_path.exists(), "file should exist after creation");
 
-    // check ownership
     let meta = fs::metadata(&file_path).unwrap();
     eprintln!("    File owner: uid={}, gid={}, mode={:o}",
               meta.uid(), meta.gid(), meta.mode() & 0o7777);
@@ -84,8 +83,7 @@ fn test_create_directory() {
     let new_dir = test_dir.join("subdir");
 
     let result = fs::create_dir(&new_dir);
-    assert!(result.is_ok(), "failed to create directory: {:?}", result.err());
-
+    assert!(result.is_ok(), "CREATE DIRECTORY FAILED: {:?}", result.err());
     assert!(new_dir.is_dir(), "directory should exist after creation");
 
     let meta = fs::metadata(&new_dir).unwrap();
@@ -102,16 +100,10 @@ fn test_nested_mkdir_p() {
     let nested_path = test_dir.join("level1/level2/level3");
 
     let result = fs::create_dir_all(&nested_path);
+    assert!(result.is_ok(), "NESTED MKDIR FAILED: {:?}", result.err());
+    assert!(nested_path.is_dir(), "nested directory should exist");
 
-    // this may fail for non-root users on gVisor
-    // because first level is created as nobody-owned 755
-    if result.is_err() {
-        eprintln!("    EXPECTED FAILURE for non-root: {:?}", result.err());
-    } else {
-        assert!(nested_path.is_dir(), "nested directory should exist");
-        eprintln!("    SUCCESS: nested directories created");
-    }
-
+    eprintln!("    Created: {}", nested_path.display());
     cleanup_test_dir(&test_dir);
 }
 
@@ -132,16 +124,16 @@ fn test_read_file() {
     }
 
     // read it back
-    let result = fs::read_to_string(&file_path);
-    assert!(result.is_ok(), "failed to read file: {:?}", result.err());
-    assert_eq!(result.unwrap(), "test content for reading");
-    eprintln!("    SUCCESS: file read correctly");
+    let content = fs::read_to_string(&file_path);
+    assert!(content.is_ok(), "READ FILE FAILED: {:?}", content.err());
+    assert_eq!(content.unwrap(), "test content for reading");
 
+    eprintln!("    Read successful");
     cleanup_test_dir(&test_dir);
 }
 
 // ============================================================================
-// MODIFY OPERATIONS - these fail for non-root on gVisor/Kata
+// MODIFY OPERATIONS
 // ============================================================================
 
 #[test]
@@ -156,31 +148,22 @@ fn test_append_to_file() {
         f.write_all(b"initial content\n").expect("failed to write initial");
     }
 
-    eprintln!("    File created, attempting append...");
-
-    // try to append - this is where non-root fails on gVisor/Kata
-    let result = OpenOptions::new()
+    // append to file
+    let mut file = OpenOptions::new()
         .append(true)
         .open(&file_path);
 
-    match result {
-        Ok(mut f) => {
-            let write_result = f.write_all(b"appended content\n");
-            if write_result.is_err() {
-                eprintln!("    EXPECTED FAILURE (write after open): {:?}", write_result.err());
-            } else {
-                eprintln!("    SUCCESS: append operation completed");
+    assert!(file.is_ok(), "APPEND OPEN FAILED: {:?}", file.err());
 
-                // verify content
-                let content = fs::read_to_string(&file_path).unwrap();
-                assert!(content.contains("appended content"), "appended content should be present");
-            }
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (open for append): {}", e);
-        }
-    }
+    let write_result = file.as_mut().unwrap().write_all(b"appended content\n");
+    assert!(write_result.is_ok(), "APPEND WRITE FAILED: {:?}", write_result.err());
 
+    // verify content
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert!(content.contains("initial content"), "original content missing");
+    assert!(content.contains("appended content"), "appended content missing");
+
+    eprintln!("    Append successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -196,31 +179,22 @@ fn test_overwrite_file() {
         f.write_all(b"original content").expect("failed to write original");
     }
 
-    eprintln!("    File created, attempting overwrite...");
-
-    // try to overwrite - this fails for non-root on gVisor/Kata
-    let result = OpenOptions::new()
+    // overwrite file
+    let mut file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .open(&file_path);
 
-    match result {
-        Ok(mut f) => {
-            let write_result = f.write_all(b"new content");
-            if write_result.is_err() {
-                eprintln!("    EXPECTED FAILURE (write after open): {:?}", write_result.err());
-            } else {
-                eprintln!("    SUCCESS: overwrite operation completed");
+    assert!(file.is_ok(), "OVERWRITE OPEN FAILED: {:?}", file.err());
 
-                let content = fs::read_to_string(&file_path).unwrap();
-                assert_eq!(content, "new content");
-            }
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (open for write): {}", e);
-        }
-    }
+    let write_result = file.as_mut().unwrap().write_all(b"new content");
+    assert!(write_result.is_ok(), "OVERWRITE WRITE FAILED: {:?}", write_result.err());
 
+    // verify content
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(content, "new content");
+
+    eprintln!("    Overwrite successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -235,24 +209,14 @@ fn test_write_in_subdirectory() {
 
     let file_in_subdir = subdir.join("file.txt");
 
-    // try to create file in subdirectory
-    // fails for non-root on gVisor because subdir is 755 owned by nobody
-    let result = File::create(&file_in_subdir);
+    // create file in subdirectory
+    let mut file = File::create(&file_in_subdir);
+    assert!(file.is_ok(), "CREATE IN SUBDIR FAILED: {:?}", file.err());
 
-    match result {
-        Ok(mut f) => {
-            let write_result = f.write_all(b"content in subdir");
-            if write_result.is_err() {
-                eprintln!("    EXPECTED FAILURE (write): {:?}", write_result.err());
-            } else {
-                eprintln!("    SUCCESS: wrote file in subdirectory");
-            }
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (create in subdir): {}", e);
-        }
-    }
+    let write_result = file.as_mut().unwrap().write_all(b"content in subdir");
+    assert!(write_result.is_ok(), "WRITE IN SUBDIR FAILED: {:?}", write_result.err());
 
+    eprintln!("    Write in subdirectory successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -268,31 +232,21 @@ fn test_dd_append_seek() {
         f.write_all(&[0u8; 1024]).expect("failed to write initial data");
     }
 
-    eprintln!("    File created (1KB), attempting seek+write...");
-
-    // try to open, seek, and write - simulates dd with seek
-    let result = OpenOptions::new()
+    // open, seek, and write (simulates dd with seek)
+    let mut file = OpenOptions::new()
         .write(true)
         .open(&file_path);
 
-    match result {
-        Ok(mut f) => {
-            if let Err(e) = f.seek(SeekFrom::Start(512)) {
-                eprintln!("    EXPECTED FAILURE (seek): {}", e);
-            } else {
-                let write_result = f.write_all(&[0xFFu8; 512]);
-                if write_result.is_err() {
-                    eprintln!("    EXPECTED FAILURE (write after seek): {:?}", write_result.err());
-                } else {
-                    eprintln!("    SUCCESS: seek+write completed");
-                }
-            }
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (open for write): {}", e);
-        }
-    }
+    assert!(file.is_ok(), "SEEK OPEN FAILED: {:?}", file.err());
 
+    let f = file.as_mut().unwrap();
+    let seek_result = f.seek(SeekFrom::Start(512));
+    assert!(seek_result.is_ok(), "SEEK FAILED: {:?}", seek_result.err());
+
+    let write_result = f.write_all(&[0xFFu8; 512]);
+    assert!(write_result.is_ok(), "SEEK WRITE FAILED: {:?}", write_result.err());
+
+    eprintln!("    Seek+write successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -305,30 +259,14 @@ fn test_touch_existing_file() {
     // create file
     File::create(&file_path).expect("failed to create file");
 
-    let _original_mtime = fs::metadata(&file_path).unwrap().modified().unwrap();
-
-    // small delay to ensure different timestamp
-    std::thread::sleep(std::time::Duration::from_millis(100));
-
-    // try to touch (update timestamps)
-    let result = OpenOptions::new()
+    // touch = open for write (updates mtime)
+    let file = OpenOptions::new()
         .write(true)
         .open(&file_path);
 
-    match result {
-        Ok(f) => {
-            // just opening for write and closing should update mtime on some systems
-            drop(f);
+    assert!(file.is_ok(), "TOUCH EXISTING FILE FAILED: {:?}", file.err());
 
-            // alternatively use filetime crate or utime syscall
-            // for now just check if open succeeded
-            eprintln!("    SUCCESS: opened existing file for write (touch)");
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (touch existing): {}", e);
-        }
-    }
-
+    eprintln!("    Touch existing file successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -346,12 +284,12 @@ fn test_delete_file() {
     File::create(&file_path).expect("failed to create file");
     assert!(file_path.exists());
 
-    // delete depends on parent directory permissions (777), not file permissions
+    // delete file
     let result = fs::remove_file(&file_path);
-    assert!(result.is_ok(), "failed to delete file: {:?}", result.err());
+    assert!(result.is_ok(), "DELETE FILE FAILED: {:?}", result.err());
     assert!(!file_path.exists(), "file should not exist after deletion");
-    eprintln!("    SUCCESS: file deleted");
 
+    eprintln!("    Delete file successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -364,17 +302,12 @@ fn test_delete_directory() {
     fs::create_dir(&subdir).expect("failed to create directory");
     assert!(subdir.is_dir());
 
-    // delete empty directory - depends on parent directory permissions
+    // delete empty directory
     let result = fs::remove_dir(&subdir);
+    assert!(result.is_ok(), "DELETE DIRECTORY FAILED: {:?}", result.err());
+    assert!(!subdir.exists(), "directory should not exist after deletion");
 
-    // may fail on Kata non-root
-    if result.is_err() {
-        eprintln!("    EXPECTED FAILURE (Kata non-root): {:?}", result.err());
-    } else {
-        assert!(!subdir.exists(), "directory should not exist after deletion");
-        eprintln!("    SUCCESS: directory deleted");
-    }
-
+    eprintln!("    Delete directory successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -394,13 +327,12 @@ fn test_rename_file() {
         f.write_all(b"content").expect("failed to write");
     }
 
-    // rename operates on parent directory, should work with 777 parent
     let result = fs::rename(&src, &dst);
-    assert!(result.is_ok(), "failed to rename: {:?}", result.err());
+    assert!(result.is_ok(), "RENAME FILE FAILED: {:?}", result.err());
     assert!(!src.exists(), "source should not exist");
     assert!(dst.exists(), "destination should exist");
-    eprintln!("    SUCCESS: file renamed");
 
+    eprintln!("    Rename file successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -416,16 +348,15 @@ fn test_copy_file() {
         f.write_all(b"content to copy").expect("failed to write");
     }
 
-    // copy creates a new file, should work with 777 parent
     let result = fs::copy(&src, &dst);
-    assert!(result.is_ok(), "failed to copy: {:?}", result.err());
+    assert!(result.is_ok(), "COPY FILE FAILED: {:?}", result.err());
     assert!(src.exists(), "source should still exist");
     assert!(dst.exists(), "destination should exist");
 
     let content = fs::read_to_string(&dst).unwrap();
     assert_eq!(content, "content to copy");
-    eprintln!("    SUCCESS: file copied");
 
+    eprintln!("    Copy file successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -441,15 +372,14 @@ fn test_symlink() {
         f.write_all(b"target content").expect("failed to write");
     }
 
-    // symlink creation depends on parent directory permissions
     let result = symlink(&target, &link);
-    assert!(result.is_ok(), "failed to create symlink: {:?}", result.err());
+    assert!(result.is_ok(), "SYMLINK FAILED: {:?}", result.err());
 
     // verify symlink works
     let content = fs::read_to_string(&link).unwrap();
     assert_eq!(content, "target content");
-    eprintln!("    SUCCESS: symlink created and readable");
 
+    eprintln!("    Symlink successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -468,27 +398,18 @@ fn test_chmod() {
     let original_mode = fs::metadata(&file_path).unwrap().mode() & 0o7777;
     eprintln!("    Original mode: {:o}", original_mode);
 
-    // try to chmod - fails for non-root (not owner of nobody-owned file)
+    // chmod to 755
     let new_perms = fs::Permissions::from_mode(0o755);
     let result = fs::set_permissions(&file_path, new_perms);
+    assert!(result.is_ok(), "CHMOD FAILED: {:?}", result.err());
 
-    match result {
-        Ok(_) => {
-            let new_mode = fs::metadata(&file_path).unwrap().mode() & 0o7777;
-            eprintln!("    New mode: {:o}", new_mode);
+    let new_mode = fs::metadata(&file_path).unwrap().mode() & 0o7777;
+    eprintln!("    New mode: {:o}", new_mode);
 
-            // check if it actually changed (may be silent no-op on NFS)
-            if new_mode == 0o755 {
-                eprintln!("    SUCCESS: chmod worked");
-            } else {
-                eprintln!("    SILENT NO-OP: chmod succeeded but mode unchanged (NFS root_squash)");
-            }
-        }
-        Err(e) => {
-            eprintln!("    EXPECTED FAILURE (chmod): {}", e);
-        }
-    }
+    // verify mode actually changed (may be no-op on NFS with root_squash)
+    assert_eq!(new_mode, 0o755, "CHMOD DID NOT TAKE EFFECT: mode is {:o}, expected 755", new_mode);
 
+    eprintln!("    Chmod successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -501,29 +422,21 @@ fn test_chown() {
     File::create(&file_path).expect("failed to create file");
 
     let original_uid = fs::metadata(&file_path).unwrap().uid();
-    eprintln!("    Original uid: {}", original_uid);
+    let current_uid = unsafe { libc::getuid() };
+    eprintln!("    Original file uid: {}, current uid: {}", original_uid, current_uid);
 
-    // try to chown to uid 1000 - requires root or being the owner
-    // on NFS with root_squash, even root's chown may silently fail
+    // try to chown to current user (should work if we own the file)
     let result = unsafe {
         let path_cstr = std::ffi::CString::new(file_path.to_str().unwrap()).unwrap();
-        libc::chown(path_cstr.as_ptr(), 1000, 1000)
+        libc::chown(path_cstr.as_ptr(), current_uid, current_uid as libc::gid_t)
     };
 
-    if result == 0 {
-        let new_uid = fs::metadata(&file_path).unwrap().uid();
-        eprintln!("    New uid: {}", new_uid);
+    assert!(result == 0, "CHOWN FAILED: {}", std::io::Error::last_os_error());
 
-        if new_uid == 1000 {
-            eprintln!("    SUCCESS: chown worked");
-        } else {
-            eprintln!("    SILENT NO-OP: chown succeeded but uid unchanged (NFS root_squash)");
-        }
-    } else {
-        let errno = std::io::Error::last_os_error();
-        eprintln!("    EXPECTED FAILURE (chown): {}", errno);
-    }
+    let new_uid = fs::metadata(&file_path).unwrap().uid();
+    assert_eq!(new_uid, current_uid, "CHOWN DID NOT TAKE EFFECT: uid is {}, expected {}", new_uid, current_uid);
 
+    eprintln!("    Chown successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -544,23 +457,19 @@ fn test_atomic_write_workaround() {
         f.write_all(b"original content").expect("failed to write");
     }
 
-    eprintln!("    Original file created");
-    eprintln!("    Attempting atomic write workaround (temp + rename)...");
-
     // atomic write: write to temp, then rename
-    // this SHOULD work even on gVisor/Kata non-root
     {
         let mut f = File::create(&tmp_path).expect("failed to create temp file");
         f.write_all(b"new content via atomic write").expect("failed to write temp");
     }
 
     let result = fs::rename(&tmp_path, &file_path);
-    assert!(result.is_ok(), "atomic rename failed: {:?}", result.err());
+    assert!(result.is_ok(), "ATOMIC RENAME FAILED: {:?}", result.err());
 
     let content = fs::read_to_string(&file_path).unwrap();
     assert_eq!(content, "new content via atomic write");
-    eprintln!("    SUCCESS: atomic write workaround works!");
 
+    eprintln!("    Atomic write workaround successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -577,9 +486,6 @@ fn test_atomic_append_workaround() {
         f.write_all(b"line1\n").expect("failed to write");
     }
 
-    eprintln!("    Original file created");
-    eprintln!("    Attempting atomic append workaround...");
-
     // read original content
     let original = fs::read_to_string(&file_path).expect("failed to read original");
 
@@ -592,13 +498,13 @@ fn test_atomic_append_workaround() {
 
     // atomic rename
     let result = fs::rename(&tmp_path, &file_path);
-    assert!(result.is_ok(), "atomic rename failed: {:?}", result.err());
+    assert!(result.is_ok(), "ATOMIC APPEND RENAME FAILED: {:?}", result.err());
 
     let content = fs::read_to_string(&file_path).unwrap();
-    assert!(content.contains("line1"));
-    assert!(content.contains("line2 (appended)"));
-    eprintln!("    SUCCESS: atomic append workaround works!");
+    assert!(content.contains("line1"), "original content missing");
+    assert!(content.contains("line2 (appended)"), "appended content missing");
 
+    eprintln!("    Atomic append workaround successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -612,16 +518,16 @@ fn test_dd_write_new_file() {
     let test_dir = create_test_dir("dd_new");
     let file_path = test_dir.join("dd_output.bin");
 
-    // write 1MB of data (like dd if=/dev/zero of=file bs=1M count=1)
+    // write 1MB of data
     let data = vec![0u8; 1024 * 1024];
 
     let result = fs::write(&file_path, &data);
-    assert!(result.is_ok(), "dd write failed: {:?}", result.err());
+    assert!(result.is_ok(), "DD WRITE FAILED: {:?}", result.err());
 
     let meta = fs::metadata(&file_path).unwrap();
     assert_eq!(meta.len(), 1024 * 1024);
-    eprintln!("    SUCCESS: wrote 1MB file");
 
+    eprintln!("    DD write 1MB successful");
     cleanup_test_dir(&test_dir);
 }
 
@@ -635,21 +541,28 @@ fn test_dd_read() {
     let data = vec![0xABu8; 1024 * 1024];
     fs::write(&file_path, &data).expect("failed to create test file");
 
-    // read it back (like dd if=file of=/dev/null)
+    // read it back
     let result = fs::read(&file_path);
-    assert!(result.is_ok(), "dd read failed: {:?}", result.err());
+    assert!(result.is_ok(), "DD READ FAILED: {:?}", result.err());
     assert_eq!(result.unwrap().len(), 1024 * 1024);
-    eprintln!("    SUCCESS: read 1MB file");
 
+    eprintln!("    DD read 1MB successful");
     cleanup_test_dir(&test_dir);
 }
 
 // ============================================================================
-// ENVIRONMENT INFO
+// ENVIRONMENT INFO (runs first due to name)
 // ============================================================================
 
+/// get runtime class from env (gvisor, kata, native)
+fn get_runtime_class() -> String {
+    std::env::var("RUNTIME_CLASS")
+        .unwrap_or_else(|_| "unknown".to_string())
+        .to_lowercase()
+}
+
 #[test]
-fn test_print_environment_info() {
+fn test_00_environment_info() {
     print_test_header("ENVIRONMENT INFO");
 
     let uid = unsafe { libc::getuid() };
@@ -660,108 +573,26 @@ fn test_print_environment_info() {
     eprintln!("    UID: {}, GID: {}", uid, gid);
     eprintln!("    EUID: {}, EGID: {}", euid, egid);
 
-    // get username
-    if let Ok(user) = std::env::var("USER") {
-        eprintln!("    USER: {}", user);
+    // get runtime from env
+    let runtime = get_runtime_class();
+    eprintln!("    RUNTIME_CLASS: {}", runtime);
+
+    if runtime == "unknown" {
+        eprintln!("    WARNING: RUNTIME_CLASS not set. Set it to: gvisor, kata, or native");
     }
 
-    // check kernel
+    // check kernel for info
     if let Ok(output) = Command::new("uname").arg("-r").output() {
         let kernel = String::from_utf8_lossy(&output.stdout);
         eprintln!("    Kernel: {}", kernel.trim());
     }
 
-    // check if running in gVisor (kernel 4.4.0)
-    if let Ok(output) = Command::new("uname").arg("-r").output() {
-        let kernel = String::from_utf8_lossy(&output.stdout);
-        if kernel.contains("4.4.0") {
-            eprintln!("    Runtime: gVisor (detected via kernel 4.4.0)");
-        } else if kernel.contains("6.12") {
-            eprintln!("    Runtime: Kata (detected via kernel 6.12.x)");
-        } else {
-            eprintln!("    Runtime: Native or unknown");
-        }
-    }
-
     // check NFS mount
     let test_path = test_base_path();
-    eprintln!("    NFS test path: {}", test_path.display());
+    eprintln!("    NFS_TEST_PATH: {}", test_path.display());
+    eprintln!("    NFS path exists: {}", test_path.exists());
 
-    if test_path.exists() {
-        eprintln!("    NFS path exists: true");
-
-        // try to get mount info
-        if let Ok(output) = Command::new("mount").output() {
-            let mounts = String::from_utf8_lossy(&output.stdout);
-            for line in mounts.lines() {
-                if line.contains(test_path.to_str().unwrap_or("")) || line.contains("nfs") {
-                    eprintln!("    Mount: {}", line);
-                }
-            }
-        }
-    } else {
-        eprintln!("    NFS path exists: false - tests may fail");
+    if !test_path.exists() {
+        panic!("NFS_TEST_PATH does not exist: {}. Set NFS_TEST_PATH env var.", test_path.display());
     }
-}
-
-// ============================================================================
-// FULL TEST SUMMARY
-// ============================================================================
-
-#[test]
-fn test_zz_summary() {
-    // named zz_ to run last
-    print_test_header("TEST SUMMARY");
-
-    let uid = unsafe { libc::getuid() };
-    let is_root = uid == 0;
-
-    eprintln!();
-    eprintln!("    Running as: {} (uid={})", if is_root { "ROOT" } else { "NON-ROOT" }, uid);
-    eprintln!();
-    eprintln!("    Expected results based on APPS-13266 findings:");
-    eprintln!();
-
-    if is_root {
-        eprintln!("    | Operation              | Expected |");
-        eprintln!("    |------------------------|----------|");
-        eprintln!("    | Create file            | PASS     |");
-        eprintln!("    | Read file              | PASS     |");
-        eprintln!("    | Append to file         | PASS     |");
-        eprintln!("    | Overwrite file         | PASS     |");
-        eprintln!("    | Create directory       | PASS     |");
-        eprintln!("    | Write in subdirectory  | PASS     |");
-        eprintln!("    | Delete file            | PASS     |");
-        eprintln!("    | Rename/Move            | PASS     |");
-        eprintln!("    | Symlink                | PASS     |");
-        eprintln!("    | chmod                  | PASS*    |");
-        eprintln!("    | chown                  | NO-OP*   |");
-        eprintln!("    | Atomic write workaround| PASS     |");
-        eprintln!();
-        eprintln!("    * On NFS with root_squash, chmod may work but chown silently fails");
-    } else {
-        eprintln!("    | Operation              | gVisor | Kata   | Native |");
-        eprintln!("    |------------------------|--------|--------|--------|");
-        eprintln!("    | Create file            | PASS   | PASS   | PASS   |");
-        eprintln!("    | Read file              | PASS   | PASS   | PASS   |");
-        eprintln!("    | Append to file         | FAIL   | FAIL   | PASS   |");
-        eprintln!("    | Overwrite file         | FAIL   | FAIL   | PASS   |");
-        eprintln!("    | Create directory       | PASS   | PASS   | PASS   |");
-        eprintln!("    | Write in subdirectory  | FAIL   | PASS   | PASS   |");
-        eprintln!("    | Nested mkdir -p        | FAIL   | PASS   | PASS   |");
-        eprintln!("    | Delete file            | PASS   | PASS   | PASS   |");
-        eprintln!("    | Delete directory       | PASS   | FAIL   | PASS   |");
-        eprintln!("    | Rename/Move            | PASS   | PASS   | PASS   |");
-        eprintln!("    | Symlink                | PASS   | PASS   | PASS   |");
-        eprintln!("    | chmod                  | NO-OP  | FAIL   | PASS   |");
-        eprintln!("    | chown                  | FAIL   | FAIL   | FAIL   |");
-        eprintln!("    | dd append (seek)       | FAIL   | FAIL   | PASS   |");
-        eprintln!("    | Atomic write workaround| PASS   | PASS   | PASS   |");
-    }
-
-    eprintln!();
-    eprintln!("    To switch users:");
-    eprintln!("      As root:     cargo test");
-    eprintln!("      As non-root: su nfsb -c 'cargo test'");
-    eprintln!();
 }
