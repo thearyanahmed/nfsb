@@ -93,26 +93,10 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # ============================================================================
-# Usage:
-#
-#   Run as ROOT:
-#     docker run --rm -it nfsb cargo test -- --nocapture
-#
-#   Run as NON-ROOT (uid=999):
-#     docker run --rm -it --user nfsb nfsb cargo test -- --nocapture
-#
-#   Or exec into container and switch users:
-#     docker exec -it <container> bash           # root shell
-#     docker exec -it <container> su - nfsb      # nfsb shell
-#
-#   Inside container:
-#     cargo test -- --nocapture                  # run as current user
-#     su nfsb -c 'cargo test -- --nocapture'    # run as nfsb from root
-#
-#   Set NFS path:
-#     NFS_TEST_PATH=/mnt/custom-nfs cargo test -- --nocapture
-#
+# Switch to non-root user by default
 # ============================================================================
+USER nfsb
+ENV CARGO_HOME=/home/nfsb/.cargo
 
 ENTRYPOINT ["nfsb"]
 CMD ["serve", "--port", "8080"]
