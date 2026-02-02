@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     nfs-common \
     procps \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # copy built binary
@@ -101,10 +102,10 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # ============================================================================
-# Switch to non-root user by default
+# Run as root to allow user switching with gosu for testing
+# Usage: gosu appnfs <cmd> | gosu appnfs2 <cmd> | gosu appother <cmd>
 # ============================================================================
-USER appnfs
-ENV CARGO_HOME=/home/appnfs/.cargo
+ENV CARGO_HOME=/root/.cargo
 
 ENTRYPOINT ["nfsb"]
 CMD ["serve", "--port", "8080"]
