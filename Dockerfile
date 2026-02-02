@@ -1,5 +1,5 @@
 # Multi-stage build for nfsb with test support
-# Supports running as root or non-root user (uid=999)
+# Runs as non-root user appnfs (uid=1000, gid=1000)
 
 FROM rust:1.83-slim-bookworm AS builder
 
@@ -46,16 +46,14 @@ COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 RUN mkdir -p /workspace && chmod 777 /workspace
 
 # ============================================================================
-# Create non-root user (uid=999, gid=999)
-# This matches typical container user configurations
+# Create non-root user (uid=1000, gid=1000)
 # ============================================================================
-RUN groupadd -g 999 nfsb && \
-    useradd -u 999 -g 999 -m -s /bin/bash nfsb && \
-    echo 'nfsb ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+RUN groupadd -g 1000 appnfs && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash appnfs
 
 # create cargo home directories for both users
-RUN mkdir -p /root/.cargo /home/nfsb/.cargo && \
-    chown -R nfsb:nfsb /home/nfsb
+RUN mkdir -p /root/.cargo /home/appnfs/.cargo && \
+    chown -R appnfs:appnfs /home/appnfs
 
 # ============================================================================
 # Copy source code for running tests inside container
@@ -65,7 +63,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY tests ./tests
 
-# set permissions so both root and nfsb can build/test
+# set permissions so both root and appnfs can build/test
 RUN chmod -R 777 /app
 
 # pre-compile dependencies for faster test runs (as root)
@@ -95,8 +93,8 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # ============================================================================
 # Switch to non-root user by default
 # ============================================================================
-USER nfsb
-ENV CARGO_HOME=/home/nfsb/.cargo
+USER appnfs
+ENV CARGO_HOME=/home/appnfs/.cargo
 
 ENTRYPOINT ["nfsb"]
 CMD ["serve", "--port", "8080"]
