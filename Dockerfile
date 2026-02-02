@@ -1,5 +1,8 @@
 # Multi-stage build for nfsb with test support
-# Runs as non-root user appnfs (uid=1000, gid=1000)
+# Test users for NFS group permission testing:
+#   appnfs  (uid=1000, gid=1000) - default user
+#   appnfs2 (uid=1001, gid=1000) - same group as appnfs
+#   appother (uid=2000, gid=1234) - different group
 
 FROM rust:1.83-slim-bookworm AS builder
 
@@ -46,14 +49,21 @@ COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 RUN mkdir -p /workspace && chmod 777 /workspace
 
 # ============================================================================
-# Create non-root user (uid=1000, gid=1000)
+# Create test users for NFS group permission testing
 # ============================================================================
+# group 1000: shared group for NFS (matches /data/gid1000 export anongid=1000)
+# group 1234: different group (should NOT have access to gid1000 export)
 RUN groupadd -g 1000 appnfs && \
-    useradd -u 1000 -g 1000 -m -s /bin/bash appnfs
+    groupadd -g 1234 othergroup && \
+    useradd -u 1000 -g 1000 -m -s /bin/bash appnfs && \
+    useradd -u 1001 -g 1000 -m -s /bin/bash appnfs2 && \
+    useradd -u 2000 -g 1234 -m -s /bin/bash appother
 
-# create cargo home directories for both users
-RUN mkdir -p /root/.cargo /home/appnfs/.cargo && \
-    chown -R appnfs:appnfs /home/appnfs
+# create cargo home directories
+RUN mkdir -p /root/.cargo /home/appnfs/.cargo /home/appnfs2/.cargo /home/appother/.cargo && \
+    chown -R appnfs:appnfs /home/appnfs && \
+    chown -R appnfs2:appnfs /home/appnfs2 && \
+    chown -R appother:othergroup /home/appother
 
 # ============================================================================
 # Copy source code for running tests inside container
