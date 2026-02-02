@@ -1,7 +1,8 @@
 # Multi-stage build for nfsb with test support
-# Test users for NFS group permission testing:
-#   appnfs  (uid=1000, gid=1000) - default user
-#   appnfs2 (uid=1001, gid=1000) - same group as appnfs
+# Test users for NFS testing:
+#   appshare (uid=555, gid=555) - multi-pod sharing test
+#   appnfs   (uid=1000, gid=1000) - default user
+#   appnfs2  (uid=1001, gid=1000) - same group as appnfs
 #   appother (uid=2000, gid=1234) - different group
 
 FROM rust:1.83-slim-bookworm AS builder
@@ -50,18 +51,22 @@ COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 RUN mkdir -p /workspace && chmod 777 /workspace
 
 # ============================================================================
-# Create test users for NFS group permission testing
+# Create test users for NFS testing
 # ============================================================================
+# group 555: multi-pod sharing test (matches /data/uid555 export)
 # group 1000: shared group for NFS (matches /data/gid1000 export anongid=1000)
 # group 1234: different group (should NOT have access to gid1000 export)
-RUN groupadd -g 1000 appnfs && \
+RUN groupadd -g 555 appshare && \
+    groupadd -g 1000 appnfs && \
     groupadd -g 1234 othergroup && \
+    useradd -u 555 -g 555 -m -s /bin/bash appshare && \
     useradd -u 1000 -g 1000 -m -s /bin/bash appnfs && \
     useradd -u 1001 -g 1000 -m -s /bin/bash appnfs2 && \
     useradd -u 2000 -g 1234 -m -s /bin/bash appother
 
 # create cargo home directories
-RUN mkdir -p /root/.cargo /home/appnfs/.cargo /home/appnfs2/.cargo /home/appother/.cargo && \
+RUN mkdir -p /root/.cargo /home/appshare/.cargo /home/appnfs/.cargo /home/appnfs2/.cargo /home/appother/.cargo && \
+    chown -R appshare:appshare /home/appshare && \
     chown -R appnfs:appnfs /home/appnfs && \
     chown -R appnfs2:appnfs /home/appnfs2 && \
     chown -R appother:othergroup /home/appother
@@ -103,7 +108,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # ============================================================================
 # Run as root to allow user switching with gosu for testing
-# Usage: gosu appnfs <cmd> | gosu appnfs2 <cmd> | gosu appother <cmd>
+# Usage: gosu appshare <cmd> | gosu appnfs <cmd> | gosu appnfs2 <cmd> | gosu appother <cmd>
 # ============================================================================
 ENV CARGO_HOME=/root/.cargo
 
