@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y \
 # copy built binary
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-RUN groupadd -g 998 appshare && \
+RUN groupadd -g 555 appshare && \
     useradd -u 998 -g 555 -m -s /bin/bash appshare
 
 # create workspace directory
