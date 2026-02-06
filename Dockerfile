@@ -1,6 +1,3 @@
-# Multi-stage build for nfsb
-# Container user: appshare (uid=555, gid=555) for multi-pod NFS sharing test
-
 FROM rust:1.83-slim-bookworm AS builder
 
 WORKDIR /app
@@ -26,9 +23,6 @@ COPY src ./src
 # build release binary
 RUN touch src/main.rs && cargo build --release
 
-# ============================================================================
-# Runtime image
-# ============================================================================
 FROM debian:bookworm-slim
 
 # install runtime dependencies
@@ -40,9 +34,8 @@ RUN apt-get update && apt-get install -y \
 # copy built binary
 COPY --from=builder /app/target/release/nfsb /usr/local/bin/nfsb
 
-# create appshare user (uid=555, gid=555)
-RUN groupadd -g 555 appshare && \
-    useradd -u 555 -g 555 -m -s /bin/bash appshare
+RUN groupadd -g 998 appshare && \
+    useradd -u 998 -g 555 -m -s /bin/bash appshare
 
 # create workspace directory
 RUN mkdir -p /workspace && chown appshare:appshare /workspace
@@ -60,7 +53,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# run as appshare (uid=555)
 USER appshare
 
 ENTRYPOINT ["nfsb"]
